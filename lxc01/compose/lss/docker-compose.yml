@@ -1,0 +1,223 @@
+x-environment:
+  PUID: 1000
+  PGID: 1000
+  TZ: France/Paris
+services:
+  gluetun:
+    image: 'qmcgaw/gluetun:latest'
+    container_name: gluetun
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - '/dev/net/tun:/dev/net/tun'
+    networks:
+      lss_network: null
+    ports:
+      - '9090:9090'
+      - '6881:6881'
+      - '6881:6881/udp'
+    environment:
+      PUID: 1000
+      PGID: 1000
+      VPN_SERVICE_PROVIDER: custom
+      VPN_TYPE: wireguard
+      WIREGUARD_ADDRESSES: 10.2.0.2/32
+      WIREGUARD_PRIVATE_KEY: '${WIREGUARD_PRIVATE_KEY}'
+      WIREGUARD_PUBLIC_KEY: '${WIREGUARD_PUBLIC_KEY}'
+      VPN_PORT_FORWARDING: 'on'
+      FIREWALL_INPUT_PORTS: '9090'
+      VPN_PORT_FORWARDING_PROVIDER: protonvpn
+      FIREWALL_OUTBOUND_SUBNETS: 10.0.0.0/16
+      VPN_ENDPOINT_PORT: '51820'
+      UPDATER_PERIOD: 24h
+      VPN_ENDPOINT_IP: 45.128.134.194
+      VPN_DNS_ADDRESS: 10.2.0.1
+    volumes:
+      - '/data/config/gluetun:/gluetun'
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - CMD
+        - wget
+        - '-q'
+        - '--spider'
+        - 'http://ipinfo.io'
+      interval: 30s
+      start_period: 30s
+      timeout: 10s
+      retries: 3
+    env_file:
+      - .env
+  qbittorrent:
+    image: 'lscr.io/linuxserver/qbittorrent:latest'
+    container_name: qbittorrent
+    network_mode: 'service:gluetun'
+    environment:
+      TZ: France/Paris
+      WEBUI_PORT: 9090
+      PUID: 1000
+      PGID: 1000
+    volumes:
+      - '/data/config/qbittorrent:/config'
+      - '/mnt/pool/data:/data'
+    depends_on:
+      gluetun:
+        condition: service_healthy
+    restart: unless-stopped
+  prowlarr:
+    image: 'lscr.io/linuxserver/prowlarr:latest'
+    container_name: prowlarr
+    networks:
+      lss_network: null
+    ports:
+      - '9696:9696'
+    environment:
+      TZ: France/Paris
+      PUID: 1000
+      PGID: 1000
+    volumes:
+      - '/data/config/prowlarr:/config'
+    restart: unless-stopped
+  flaresolverr:
+    image: 'ghcr.io/flaresolverr/flaresolverr:latest'
+    container_name: flaresolverr
+    networks:
+      lss_network: null
+    ports:
+      - '8191:8191'
+    environment:
+      LOG_LEVEL: info
+      TZ: France/Paris
+      PUID: 1000
+      PGID: 1000
+    restart: unless-stopped
+  radarr:
+    image: 'lscr.io/linuxserver/radarr:latest'
+    container_name: radarr
+    networks:
+      lss_network: null
+    ports:
+      - '7878:7878'
+    environment:
+      TZ: France/Paris
+      PUID: 1000
+      PGID: 1000
+    volumes:
+      - '/data/config/radarr:/config'
+      - '/mnt/pool/data:/data'
+    restart: unless-stopped
+  sonarr:
+    image: 'lscr.io/linuxserver/sonarr:latest'
+    container_name: sonarr
+    networks:
+      lss_network: null
+    ports:
+      - '8989:8989'
+    environment:
+      TZ: France/Paris
+      PUID: 1000
+      PGID: 1000
+    volumes:
+      - '/data/config/sonarr:/config'
+      - '/mnt/pool/data:/data'
+    restart: unless-stopped
+    env_file:
+      - .env
+  lidarr:
+    image: 'lscr.io/linuxserver/lidarr:latest'
+    container_name: lidarr
+    ports:
+      - '8686:8686'
+    volumes:
+      - '/data/config/lidarr:/config'
+      - '/mnt/pool/data:/data'
+    restart: unless-stopped
+    environment:
+      PUID: 1000
+      PGID: 1000
+    networks:
+      lss_network: null
+    env_file:
+      - .env
+  bazarr:
+    image: 'lscr.io/linuxserver/bazarr:latest'
+    container_name: bazarr
+    networks:
+      lss_network: null
+    ports:
+      - '6767:6767'
+    environment:
+      TZ: France/Paris
+      PUID: 1000
+      PGID: 1000
+    volumes:
+      - '/data/config/bazarr:/config'
+      - '/mnt/pool/data/media:/data/media'
+    restart: unless-stopped
+    env_file:
+      - .env
+  jellyfin:
+    image: 'jellyfin/jellyfin:latest'
+    container_name: jellyfin
+    ports:
+      - '8096:8096'
+    networks:
+      lss_network: null
+    environment:
+      TZ: Europe/Paris
+      PUID: 1000
+      PGID: 1000
+    volumes:
+      - '/data/config/jellyfin:/config'
+      - '/data/config/jellyfin/cache:/cache'
+      - '/mnt/pool/data/media:/media:ro'
+    restart: unless-stopped
+    env_file:
+      - .env
+  jellyseerr:
+    image: 'fallenbagel/jellyseerr:latest'
+    container_name: jellyseerr
+    ports:
+      - '5055:5055'
+    networks:
+      lss_network: null
+    environment:
+      TZ: Europe/Paris
+      PUID: 1000
+      PGID: 1000
+    volumes:
+      - '/data/config/jellyseerr:/app/config'
+    restart: unless-stopped
+    env_file:
+      - .env
+  notifiarr:
+    image: 'golift/notifiarr:latest'
+    container_name: notifiarr
+    networks:
+      lss_network: null
+    ports:
+      - '5454:5454'
+    environment:
+      TZ: Europe/Paris
+    volumes:
+      - '/data/config/notifiarr:/config'
+      - '/var/run/utmp:/var/run/utmp:ro'
+    restart: unless-stopped
+    env_file:
+      - .env
+  recyclarr:
+    image: ghcr.io/recyclarr/recyclarr
+    container_name: recyclarr
+    networks:
+      lss_network: null
+    volumes:
+      - '/data/config/recyclarr:/config'
+    environment:
+      TZ: Europe/Paris
+    restart: unless-stopped
+    env_file:
+      - .env
+
+networks:
+  lss_network:
+    driver: bridge

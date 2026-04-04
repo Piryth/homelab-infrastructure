@@ -1,0 +1,16 @@
+pve.endignous.fr {
+    tls {
+        dns cloudflare {env.CLOUDFLARE_API_TOKEN}
+    }
+    reverse_proxy 192.168.1.230:8006 
+    ransport http {
+        tls_insecure_skip_verify
+    }
+}
+
+pihole.endignous.fr {
+    tls {
+        dns cloudflare {env.CLOUDFLARE_API_TOKEN}
+    }
+    reverse_proxy 192.168.1.232:80 
+}

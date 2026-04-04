@@ -1,0 +1,19 @@
+version: "3.8"
+
+services:
+  caddy:
+    build: . 
+    container_name: caddy
+    restart: unless-stopped
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - ./caddy_data:/data
+      - ./caddy_config:/config
+    environment:
+      - CLOUDFLARE_API_TOKEN=${CLOUDFLARE_API_TOKEN}
+    networks:
+      - caddy_network
+
+networks:
+  caddy_network:
+    driver: bridge

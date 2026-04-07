@@ -1,0 +1,20 @@
+services:
+  caddy:
+    build: .
+    ports:
+      - "80:80"
+      - "443:443"
+    container_name: caddy
+    restart: unless-stopped
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - ./caddy_data:/data
+      - ./caddy_config:/config
+    environment:
+      - CLOUDFLARE_API_TOKEN={{ caddy_cloudflare_token }}
+    networks:
+      - caddy_network
+
+networks:
+  caddy_network:
+    driver: bridge

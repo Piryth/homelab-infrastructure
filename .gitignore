@@ -1,1 +1,17 @@
 .env
+
+# Secrets
+terraform.tfvars
+*.auto.tfvars
+
+# State — contains secrets, should use remote backend in production
+*.tfstate
+*.tfstate.backup
+.terraform/
+
+# Crash logs
+crash.log
+crash.*.log
+
+# Lock file is fine to commit
+!.terraform.lock.hcl

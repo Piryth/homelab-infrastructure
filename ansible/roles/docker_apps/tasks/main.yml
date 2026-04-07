@@ -1,0 +1,48 @@
+# roles/docker_apps/tasks/caddy.yml
+---
+- name: Create Caddy directory structure
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - "{{ caddy_base_dir }}"
+    - "{{ caddy_base_dir }}/data"
+    - "{{ caddy_base_dir }}/config"
+
+- name: Template Caddyfile
+  ansible.builtin.template:
+    src: caddy/Caddyfile.j2
+    dest: "{{ caddy_base_dir }}/Caddyfile"
+    mode: "0644"
+  register: caddyfile
+
+- name: Template Dockerfile
+  ansible.builtin.template:
+    src: caddy/Dockerfile.j2
+    dest: "{{ caddy_base_dir }}/Dockerfile"
+    mode: "0644"
+  register: dockerfile
+
+- name: Template docker-compose.yml
+  ansible.builtin.template:
+    src: caddy/docker-compose.yml.j2
+    dest: "{{ caddy_base_dir }}/docker-compose.yml"
+    mode: "0644"
+  register: composefile
+
+- name: Build and deploy Caddy stack
+  community.docker.docker_compose_v2:
+    project_src: "{{ caddy_base_dir }}"
+    build: "{{ (dockerfile is changed) | ternary('always', 'policy') }}"
+    state: present
+  register: caddy_deploy
+
+- name: Reload Caddy if only Caddyfile changed
+  when:
+    - caddyfile is changed
+    - dockerfile is not changed
+    - composefile is not changed
+  community.docker.docker_container_exec:
+    container: caddy
+    command: caddy reload --config /etc/caddy/Caddyfile

@@ -1,0 +1,53 @@
+# Copy this to terraform.tfvars and fill in real values.
+# terraform.tfvars is gitignored — never commit secrets.
+
+# -----------------------------------------------------------------------------
+# Proxmox connection
+# -----------------------------------------------------------------------------
+pve_api_url   = "https://192.168.1.10:8006"
+pve_api_token = "terraform@pam!terraform=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+pve_insecure  = true
+pve_ssh_user  = "root"
+
+# -----------------------------------------------------------------------------
+# PVE nodes
+# -----------------------------------------------------------------------------
+pve_nodes = {
+  pve1 = "192.168.1.10"
+  pve2 = "192.168.1.11"
+}
+
+# -----------------------------------------------------------------------------
+# SSH keys (paste your public key)
+# -----------------------------------------------------------------------------
+ssh_public_keys = [
+  "ssh-ed25519 AAAA... user@workstation"
+]
+
+# -----------------------------------------------------------------------------
+# LXC01 - DNS host
+# -----------------------------------------------------------------------------
+pihole_vmid      = 100          # <-- your actual VMID
+pihole_node      = "pve1"       # <-- node it lives on
+pihole_ip        = "192.168.1.20"
+pihole_hostname  = "pihole"
+pihole_cores     = 1
+pihole_memory    = 512
+pihole_swap      = 256
+pihole_disk_size = 8
+pihole_storage   = "local-lvm"
+pihole_template  = "local:vztmpl/debian-12-standard_12.7-1_amd64.tar.zst"
+
+# -----------------------------------------------------------------------------
+# LXC02 - Docker host
+# -----------------------------------------------------------------------------
+docker_vmid      = 101          # <-- your actual VMID
+docker_node      = "pve2"       # <-- node it lives on
+docker_ip        = "192.168.1.30"
+docker_hostname  = "docker"
+docker_cores     = 2
+docker_memory    = 2048
+docker_swap      = 512
+docker_disk_size = 32
+docker_storage   = "local-lvm"
+docker_template  = "local:vztmpl/debian-12-standard_12.7-1_amd64.tar.zst"

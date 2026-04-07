@@ -1,0 +1,6 @@
+---
+- name: Deploy Docker apps
+  hosts: lxc01
+  become: true
+  roles:
+    - docker_apps

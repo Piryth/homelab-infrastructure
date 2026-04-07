@@ -1,0 +1,117 @@
+---
+- name: Detect available disk partitions
+  ansible.builtin.shell:
+    cmd: "lsblk -rno NAME,TYPE | awk '$2==\"part\"{print \"/dev/\" $1}' | grep -E '/dev/sd[a-z]+1$'"
+  register: detected_disks
+  changed_when: false
+  failed_when: detected_disks.stdout_lines | length == 0
+
+- name: Display detected disks
+  ansible.builtin.debug:
+    msg: "Detected disks: {{ detected_disks.stdout_lines }}"
+
+- name: Get UUID for each disk
+  ansible.builtin.command:
+    cmd: "blkid -s UUID -o value {{ item }}"
+  register: disk_uuids
+  changed_when: false
+  loop: "{{ detected_disks.stdout_lines }}"
+
+- name: Build disk mapping (device → UUID)
+  ansible.builtin.set_fact:
+    disk_map: >-
+      {{
+        disk_map | default([]) + [{
+          'device': item.item,
+          'uuid': item.stdout,
+          'name': 'disk' + (idx + 1) | string,
+          'mount': disk_mount_base + '/disk' + (idx + 1) | string
+        }]
+      }}
+  loop: "{{ disk_uuids.results }}"
+  loop_control:
+    index_var: idx
+
+- name: Display disk mapping
+  ansible.builtin.debug:
+    msg: "{{ disk_map }}"
+
+# --- Individual disk mounts ---
+
+- name: Create individual disk mount points
+  ansible.builtin.file:
+    path: "{{ item.mount }}"
+    state: directory
+    mode: "0755"
+  loop: "{{ disk_map }}"
+
+- name: Mount individual disks via UUID in fstab
+  ansible.posix.mount:
+    path: "{{ item.mount }}"
+    src: "UUID={{ item.uuid }}"
+    fstype: "{{ disk_fstype }}"
+    opts: "{{ disk_mount_opts }}"
+    state: mounted
+  loop: "{{ disk_map }}"
+
+# --- MergerFS ---
+
+- name: Check if mergerfs is installed
+  ansible.builtin.command:
+    cmd: which mergerfs
+  register: mergerfs_check
+  changed_when: false
+  failed_when: false
+
+- name: Install mergerfs
+  when: mergerfs_check.rc != 0
+  block:
+    - name: Get latest mergerfs release URL
+      ansible.builtin.uri:
+        url: https://api.github.com/repos/trapexit/mergerfs/releases/latest
+        return_content: true
+      register: mergerfs_release
+
+    - name: Set mergerfs .deb URL
+      ansible.builtin.set_fact:
+        mergerfs_deb_url: >-
+          {{ mergerfs_release.json.assets
+             | selectattr('name', 'match', '.*bookworm_amd64\.deb$')
+             | map(attribute='browser_download_url')
+             | first }}
+
+    - name: Download mergerfs .deb
+      ansible.builtin.get_url:
+        url: "{{ mergerfs_deb_url }}"
+        dest: /tmp/mergerfs.deb
+        mode: "0644"
+
+    - name: Install mergerfs .deb
+      ansible.builtin.apt:
+        deb: /tmp/mergerfs.deb
+        state: present
+
+    - name: Clean up .deb
+      ansible.builtin.file:
+        path: /tmp/mergerfs.deb
+        state: absent
+
+# --- MergerFS pool mount ---
+
+- name: Create mergerfs pool mount point
+  ansible.builtin.file:
+    path: "{{ mergerfs_pool_path }}"
+    state: directory
+    mode: "0755"
+
+- name: Build mergerfs source string
+  ansible.builtin.set_fact:
+    mergerfs_src: "{{ disk_map | map(attribute='mount') | join(':') }}"
+
+- name: Mount mergerfs pool in fstab
+  ansible.posix.mount:
+    path: "{{ mergerfs_pool_path }}"
+    src: "{{ mergerfs_src }}"
+    fstype: fuse.mergerfs
+    opts: "{{ mergerfs_opts }}"
+    state: mounted

@@ -1,0 +1,19 @@
+{# templates/caddy/Caddyfile.j2 #}
+{
+    email {{ caddy_email }}
+}
+
+{% for proxy in caddy_reverse_proxies %}
+{{ proxy.domain }} {
+    tls {
+        dns cloudflare {env.CLOUDFLARE_API_TOKEN}
+    }
+    reverse_proxy {{ proxy.upstream }}{% if proxy.tls_insecure | default(false) %} {
+        transport http {
+            tls_insecure_skip_verify
+        }
+    }{% endif %}
+
+}
+
+{% endfor %}

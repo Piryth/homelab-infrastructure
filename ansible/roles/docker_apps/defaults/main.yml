@@ -1,0 +1,16 @@
+---
+caddy_base_dir: /opt/docker/caddy
+caddy_email: "{{ vault_caddy_email }}"
+caddy_cloudflare_token: "{{ vault_cloudflare_token }}"
+
+caddy_reverse_proxies:
+  - name: pve01
+    domain: pve.endignous.fr
+    upstream: "192.168.1.230:8006"
+    tls_insecure: true
+  - name: pihole
+    domain: pihole.endignous.fr
+    upstream: "192.168.1.232:80"
+  - name: nextcloud
+    domain: nextcloud.endignous.fr
+    upstream: "192.168.1.232:6464"

@@ -1,23 +1,23 @@
 # Outputs used by Ansible and for quick reference after apply.
 
-output "pihole_ip" {
+output "lxc02_ip" {
   description = "PiHole container IP"
-  value       = var.pihole_ip
+  value       = var.lxc02_ip
 }
 
-output "pihole_vmid" {
+output "lxc02_vmid" {
   description = "PiHole container VMID"
-  value       = proxmox_virtual_environment_container.pihole.vm_id
+  value       = proxmox_virtual_environment_container.lxc02.vm_id
 }
 
-output "docker_ip" {
+output "lxc01_ip" {
   description = "Docker host container IP"
-  value       = var.docker_ip
+  value       = var.lxc01_ip
 }
 
-output "docker_vmid" {
+output "lxc01_vmid" {
   description = "Docker host container VMID"
-  value       = proxmox_virtual_environment_container.docker.vm_id
+  value       = proxmox_virtual_environment_container.lxc01.vm_id
 }
 
 output "ansible_inventory" {
@@ -25,13 +25,13 @@ output "ansible_inventory" {
   value = <<-EOT
     # Auto-generated from Terraform outputs
     [pihole]
-    ${var.pihole_hostname} ansible_host=${var.pihole_ip}
+    ${var.lxc02_hostname} ansible_host=${var.lxc02_ip}
 
-    [docker_hosts]
-    ${var.docker_hostname} ansible_host=${var.docker_ip}
+    [lxc01_hosts]
+    ${var.lxc01_hostname} ansible_host=${var.lxc01_ip}
 
     [lxc:children]
     pihole
-    docker_hosts
+    lxc01_hosts
   EOT
 }

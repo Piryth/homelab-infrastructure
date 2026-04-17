@@ -1,9 +1,9 @@
-resource "proxmox_virtual_environment_container" "pihole" {
+resource "proxmox_virtual_environment_container" "lxc02" {
   # -------------------------------------------------------
   # Identity
   # -------------------------------------------------------
-  vm_id     = var.pihole_vmid
-  node_name = var.pihole_node
+  vm_id     = var.lxc02_vmid
+  node_name = var.lxc02_node
 
   description = "PiHole + Unbound DNS resolver"
 
@@ -13,7 +13,7 @@ resource "proxmox_virtual_environment_container" "pihole" {
   # Template (only used on first create, ignored on import)
   # -------------------------------------------------------
   operating_system {
-    template_file_id = var.pihole_template
+    template_file_id = var.lxc02_template
     type             = "debian"
   }
 
@@ -21,20 +21,20 @@ resource "proxmox_virtual_environment_container" "pihole" {
   # Compute
   # -------------------------------------------------------
   cpu {
-    cores = var.pihole_cores
+    cores = var.lxc02_cores
   }
 
   memory {
-    dedicated = var.pihole_memory
-    swap      = var.pihole_swap
+    dedicated = var.lxc02_memory
+    swap      = var.lxc02_swap
   }
 
   # -------------------------------------------------------
   # Storage
   # -------------------------------------------------------
   disk {
-    datastore_id = var.pihole_storage
-    size         = var.pihole_disk_size
+    datastore_id = var.lxc02_storage
+    size         = var.lxc02_disk_size
   }
 
   # -------------------------------------------------------
@@ -43,14 +43,15 @@ resource "proxmox_virtual_environment_container" "pihole" {
   network_interface {
     name   = "eth0"
     bridge = "vmbr0"
+    firewall = true
   }
 
   initialization {
-    hostname = var.pihole_hostname
+    hostname = var.lxc02_hostname
 
     ip_config {
       ipv4 {
-        address = "${var.pihole_ip}${var.network_cidr}"
+        address = "${var.lxc02_ip}${var.network_cidr}"
         gateway = var.network_gateway
       }
     }
@@ -74,6 +75,12 @@ resource "proxmox_virtual_environment_container" "pihole" {
 
   features {
     nesting = false
+  }
+
+  console {
+  enabled   = true
+  tty_count = 2
+  type      = "tty"
   }
 
   # -------------------------------------------------------

@@ -60,6 +60,16 @@ services:
       - protonmail-bridge
     env_file:
       - .env
+    
+  onlyoffice-document-server:
+    container_name: onlyoffice-document-server
+    image: onlyoffice/documentserver:latest
+    restart: always
+    environment:
+      - JWT_SECRET= {{ onlyoffice_secret}}
+    volumes:
+      - document_data:/var/www/onlyoffice/Data
+      - document_log:/var/log/onlyoffice
 
   nextcloud-cron:
     image: nextcloud:stable

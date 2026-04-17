@@ -74,3 +74,5 @@ nextcloud_mail_domain: endignous.fr
 nextcloud_smtp_from: "{{ vault_nextcloud_smtp_from }}"
 nextcloud_smtp_user: "{{ vault_nextcloud_smtp_user }}"
 nextcloud_smtp_password: "{{ vault_nextcloud_smtp_password }}"
+# OnlyOffice
+onlyoffice_secret: "{{ vault_onlyoffice_secret}}"

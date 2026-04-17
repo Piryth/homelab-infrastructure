@@ -1,9 +1,9 @@
-resource "proxmox_virtual_environment_container" "docker" {
+resource "proxmox_virtual_environment_container" "lxc01" {
   # -------------------------------------------------------
   # Identity
   # -------------------------------------------------------
-  vm_id     = var.docker_vmid
-  node_name = var.docker_node
+  vm_id     = var.lxc01_vmid
+  node_name = var.lxc01_node
 
   description = "Docker application host"
 
@@ -13,7 +13,7 @@ resource "proxmox_virtual_environment_container" "docker" {
   # Template
   # -------------------------------------------------------
   operating_system {
-    template_file_id = var.docker_template
+    template_file_id = var.lxc01_template
     type             = "debian"
   }
 
@@ -21,20 +21,20 @@ resource "proxmox_virtual_environment_container" "docker" {
   # Compute
   # -------------------------------------------------------
   cpu {
-    cores = var.docker_cores
+    cores = var.lxc01_cores
   }
 
   memory {
-    dedicated = var.docker_memory
-    swap      = var.docker_swap
+    dedicated = var.lxc01_memory
+    swap      = var.lxc01_swap
   }
 
   # -------------------------------------------------------
   # Storage
   # -------------------------------------------------------
   disk {
-    datastore_id = var.docker_storage
-    size         = var.docker_disk_size
+    datastore_id = var.lxc01_storage
+    size         = var.lxc01_disk_size
   }
 
   # -------------------------------------------------------
@@ -43,20 +43,21 @@ resource "proxmox_virtual_environment_container" "docker" {
   network_interface {
     name   = "eth0"
     bridge = "vmbr0"
+    firewall = true
   }
 
   initialization {
-    hostname = var.docker_hostname
+    hostname = var.lxc01_hostname
 
     ip_config {
       ipv4 {
-        address = "${var.docker_ip}${var.network_cidr}"
+        address = "${var.lxc01_ip}${var.network_cidr}"
         gateway = var.network_gateway
       }
     }
 
     dns {
-      servers = [var.pihole_ip, var.network_gateway]
+      servers = [var.lxc02_ip, var.network_gateway]
       domain  = "lan"
     }
 
@@ -74,7 +75,19 @@ resource "proxmox_virtual_environment_container" "docker" {
 
   features {
     nesting = true
-    keyctl  = true   # required by Docker for key management
+    keyctl  = true 
+  }
+
+  mount_point {
+  volume = "/mnt/pool"
+  path   = "/mnt/pool"
+  shared = true
+  }
+
+console {
+  enabled   = true
+  tty_count = 2
+  type      = "tty"
   }
 
   # -------------------------------------------------------

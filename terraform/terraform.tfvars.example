@@ -24,30 +24,31 @@ ssh_public_keys = [
   "ssh-ed25519 AAAA... user@workstation"
 ]
 
-# -----------------------------------------------------------------------------
-# LXC01 - DNS host
-# -----------------------------------------------------------------------------
-pihole_vmid      = 100          # <-- your actual VMID
-pihole_node      = "pve1"       # <-- node it lives on
-pihole_ip        = "192.168.1.20"
-pihole_hostname  = "pihole"
-pihole_cores     = 1
-pihole_memory    = 512
-pihole_swap      = 256
-pihole_disk_size = 8
-pihole_storage   = "local-lvm"
-pihole_template  = "local:vztmpl/debian-12-standard_12.7-1_amd64.tar.zst"
 
 # -----------------------------------------------------------------------------
 # LXC02 - Docker host
 # -----------------------------------------------------------------------------
-docker_vmid      = 101          # <-- your actual VMID
-docker_node      = "pve2"       # <-- node it lives on
-docker_ip        = "192.168.1.30"
-docker_hostname  = "docker"
-docker_cores     = 2
-docker_memory    = 2048
-docker_swap      = 512
-docker_disk_size = 32
-docker_storage   = "local-lvm"
-docker_template  = "local:vztmpl/debian-12-standard_12.7-1_amd64.tar.zst"
+lxc01_vmid      = 101
+lxc01_node      = "pve2"
+lxc01_ip        = "192.168.1.30"
+lxc01_hostname  = "docker"
+lxc01_cores     = 2
+lxc01_memory    = 2048
+lxc01_swap      = 512
+lxc01_disk_size = 32
+lxc01_storage   = "local-lvm"
+lxc01_template  = "local:vztmpl/debian-12-standard_12.7-1_amd64.tar.zst"
+
+# -----------------------------------------------------------------------------
+# LXC02 - DNS host
+# -----------------------------------------------------------------------------
+lxc02_vmid      = 100
+lxc02_node      = "pve1"
+lxc02_ip        = "192.168.1.20"
+lxc02_hostname  = "pihole"
+lxc02_cores     = 1
+lxc02_memory    = 512
+lxc02_swap      = 256
+lxc02_disk_size = 8
+lxc02_storage   = "local-lvm"
+lxc02_template  = "local:vztmpl/debian-12-standard_12.7-1_amd64.tar.zst"

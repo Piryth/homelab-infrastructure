@@ -12,5 +12,65 @@ caddy_reverse_proxies:
     domain: pihole.endignous.fr
     upstream: "192.168.1.232:80"
   - name: nextcloud
-    domain: nextcloud.endignous.fr
-    upstream: "192.168.1.232:6464"
+    domain: nextcloud.docker.endignous.fr
+    upstream: nextcloud-app:80
+  # LSS Media Stack
+  - name: jellyfin
+    domain: jellyfin.docker.endignous.fr
+    upstream: "192.168.1.231:8096"
+  - name: jellyseerr
+    domain: jellyseerr.docker.endignous.fr
+    upstream: "192.168.1.231:5055"
+  - name: sonarr
+    domain: sonarr.docker.endignous.fr
+    upstream: "192.168.1.231:8989"
+  - name: radarr
+    domain: radarr.docker.endignous.fr
+    upstream: "192.168.1.231:7878"
+  - name: lidarr
+    domain: lidarr.docker.endignous.fr
+    upstream: "192.168.1.231:8686"
+  - name: bazarr
+    domain: bazarr.docker.endignous.fr
+    upstream: "192.168.1.231:6767"
+  - name: prowlarr
+    domain: prowlarr.docker.endignous.fr
+    upstream: "192.168.1.231:9696"
+  - name: qbittorrent
+    domain: qbit.docker.endignous.fr
+    upstream: "192.168.1.231:9090"
+  - name: notifiarr
+    domain: notifiarr.docker.endignous.fr
+    upstream: "192.168.1.231:5454"
+  - name: flaresolverr
+    domain: flaresolverr.docker.endignous.fr
+    upstream: "192.168.1.231:8191"
+
+# LSS Media Stack
+lss_base_dir: /opt/docker/lss
+lss_config_dir: /data/config
+lss_data_dir: /mnt/pool/data
+lss_puid: 1000
+lss_pgid: 1000
+lss_tz: Europe/Paris
+lss_vpn_endpoint_ip: 45.128.134.194
+lss_vpn_endpoint_port: 51820
+lss_vpn_dns: 10.2.0.1
+lss_vpn_address: 10.2.0.2/32
+# WireGuard secrets — define in group_vars/lxc01/vault.yml
+lss_wg_private_key: "{{ vault_lss_wg_private_key }}"
+lss_wg_public_key: "{{ vault_lss_wg_public_key }}"
+
+# Nextcloud stack
+nextcloud_base_dir: /opt/docker/nextcloud
+nextcloud_domain: nextcloud.docker.endignous.fr
+# Nextcloud secrets — define in group_vars/lxc01/vault.yml
+nextcloud_mysql_root_password: "{{ vault_nextcloud_mysql_root_password }}"
+nextcloud_mysql_password: "{{ vault_nextcloud_mysql_password }}"
+nextcloud_admin_user: "{{ vault_nextcloud_admin_user }}"
+nextcloud_admin_password: "{{ vault_nextcloud_admin_password }}"
+# Mail via Proton Mail Bridge — define in group_vars/lxc01/vault.yml
+nextcloud_mail_domain: endignous.fr
+nextcloud_smtp_from: "{{ vault_nextcloud_smtp_from }}"
+nextcloud_smtp_user: "{{ vault_nextcloud_smtp_user }}"
+nextcloud_smtp_password: "{{ vault_nextcloud_smtp_password }}"

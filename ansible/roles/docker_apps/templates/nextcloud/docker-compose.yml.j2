@@ -30,6 +30,8 @@ services:
     restart: unless-stopped
     volumes:
       - nextcloud-data:/var/www/html
+    dns:
+      - 192.168.1.232
     environment:
       MYSQL_HOST: nextcloud-db
       MYSQL_DATABASE: nextcloud
@@ -51,9 +53,15 @@ services:
       SMTP_AUTHTYPE: LOGIN
       SMTP_NAME: "{{ '{{ SMTP_NAME }}' }}"
       SMTP_PASSWORD: "{{ '{{ SMTP_PASSWORD }}' }}"
+      # onlyoffice
+      ONLYOFFICE_JWT_SECRET={{ onlyoffice_secret }}
     networks:
-      - nextcloud-internal
-      - caddy-proxy
+      nextcloud-internal:
+        aliases:
+          - "{{ nextcloud_domain }}"
+      caddy-proxy:
+        aliases:
+          - "{{ nextcloud_domain }}"
     depends_on:
       - nextcloud-db
       - nextcloud-redis
@@ -65,11 +73,19 @@ services:
     container_name: onlyoffice-document-server
     image: onlyoffice/documentserver:latest
     restart: always
+    dns:
+      - 192.168.1.232
     environment:
-      - JWT_SECRET= {{ onlyoffice_secret}}
+      - JWT_SECRET={{ onlyoffice_secret }}
+      - JWT_ENABLED=true
+      - JWT_HEADER=AuthorizationJwt
+      - USE_UNAUTHORIZED_STORAGE=true 
     volumes:
       - document_data:/var/www/onlyoffice/Data
       - document_log:/var/log/onlyoffice
+    networks:
+      - nextcloud-internal
+      - caddy-proxy
 
   nextcloud-cron:
     image: nextcloud:stable
@@ -97,6 +113,8 @@ volumes:
   nextcloud-db:
   nextcloud-data:
   protonmail-bridge-data:
+  document_data:
+  document_log:
 
 networks:
   nextcloud-internal:

@@ -14,6 +14,9 @@ caddy_reverse_proxies:
   - name: nextcloud
     domain: nextcloud.docker.endignous.fr
     upstream: nextcloud-app:80
+  - name: onlyoffice
+    domain: onlyoffice.docker.endignous.fr
+    upstream: onlyoffice-document-server:80
   # LSS Media Stack
   - name: jellyfin
     domain: jellyfin.docker.endignous.fr

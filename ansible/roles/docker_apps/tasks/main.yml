@@ -73,3 +73,21 @@
   community.docker.docker_compose_v2:
     project_src: "{{ nextcloud_base_dir }}"
     state: present
+
+- name: Configure OnlyOffice internal document server URL
+  community.docker.docker_container_exec:
+    container: nextcloud-app
+    user: www-data
+    command: php occ config:app:set onlyoffice DocumentServerInternalUrl --value="http://onlyoffice-document-server/"
+
+- name: Configure OnlyOffice storage URL (callback from OnlyOffice to Nextcloud)
+  community.docker.docker_container_exec:
+    container: nextcloud-app
+    user: www-data
+    command: php occ config:app:set onlyoffice StorageUrl --value="http://{{ nextcloud_domain }}/"
+
+- name: Configure OnlyOffice JWT secret
+  community.docker.docker_container_exec:
+    container: nextcloud-app
+    user: www-data
+    command: php occ config:app:set onlyoffice secret --value="{{ onlyoffice_secret }}"

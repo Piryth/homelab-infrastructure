@@ -2,8 +2,8 @@ resource "proxmox_virtual_environment_container" "lxc01" {
   # -------------------------------------------------------
   # Identity
   # -------------------------------------------------------
-  vm_id     = var.lxc01_vmid
-  node_name = var.lxc01_node
+  vm_id     = var.lxc01.vm_id
+  node_name = var.lxc01.node
 
   description = "Docker application host"
 
@@ -13,7 +13,7 @@ resource "proxmox_virtual_environment_container" "lxc01" {
   # Template
   # -------------------------------------------------------
   operating_system {
-    template_file_id = var.lxc01_template
+    template_file_id = var.lxc01.template
     type             = "debian"
   }
 
@@ -21,20 +21,20 @@ resource "proxmox_virtual_environment_container" "lxc01" {
   # Compute
   # -------------------------------------------------------
   cpu {
-    cores = var.lxc01_cores
+    cores = var.lxc01.cores
   }
 
   memory {
-    dedicated = var.lxc01_memory
-    swap      = var.lxc01_swap
+    dedicated = var.lxc01.memory
+    swap      = var.lxc01.swap
   }
 
   # -------------------------------------------------------
   # Storage
   # -------------------------------------------------------
   disk {
-    datastore_id = var.lxc01_storage
-    size         = var.lxc01_disk_size
+    datastore_id = var.lxc01.storage
+    size         = var.lxc01.disk_size
   }
 
   # -------------------------------------------------------
@@ -47,17 +47,16 @@ resource "proxmox_virtual_environment_container" "lxc01" {
   }
 
   initialization {
-    hostname = var.lxc01_hostname
-
+    hostname = var.lxc01.hostname
     ip_config {
       ipv4 {
-        address = "${var.lxc01_ip}${var.network_cidr}"
+        address = "${var.lxc01.ip}${var.network_cidr}"
         gateway = var.network_gateway
       }
     }
 
     dns {
-      servers = [var.lxc02_ip, var.network_gateway]
+      servers = [var.lxc02.ip, var.network_gateway]
       domain  = "lan"
     }
 
@@ -81,7 +80,7 @@ resource "proxmox_virtual_environment_container" "lxc01" {
   mount_point {
   volume = "/mnt/pool"
   path   = "/mnt/pool"
-  shared = true
+  shared = false
   }
 
 console {

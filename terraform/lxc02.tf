@@ -2,8 +2,8 @@ resource "proxmox_virtual_environment_container" "lxc02" {
   # -------------------------------------------------------
   # Identity
   # -------------------------------------------------------
-  vm_id     = var.lxc02_vmid
-  node_name = var.lxc02_node
+  vm_id     = var.lxc02.vm_id
+  node_name = var.lxc02.node
 
   description = "PiHole + Unbound DNS resolver"
 
@@ -13,7 +13,7 @@ resource "proxmox_virtual_environment_container" "lxc02" {
   # Template (only used on first create, ignored on import)
   # -------------------------------------------------------
   operating_system {
-    template_file_id = var.lxc02_template
+    template_file_id = var.lxc02.template
     type             = "debian"
   }
 
@@ -21,20 +21,20 @@ resource "proxmox_virtual_environment_container" "lxc02" {
   # Compute
   # -------------------------------------------------------
   cpu {
-    cores = var.lxc02_cores
+    cores = var.lxc02.cores
   }
 
   memory {
-    dedicated = var.lxc02_memory
-    swap      = var.lxc02_swap
+    dedicated = var.lxc02.memory
+    swap      = var.lxc02.swap
   }
 
   # -------------------------------------------------------
   # Storage
   # -------------------------------------------------------
   disk {
-    datastore_id = var.lxc02_storage
-    size         = var.lxc02_disk_size
+    datastore_id = var.lxc02.storage
+    size         = var.lxc02.disk_size
   }
 
   # -------------------------------------------------------
@@ -47,11 +47,11 @@ resource "proxmox_virtual_environment_container" "lxc02" {
   }
 
   initialization {
-    hostname = var.lxc02_hostname
+    hostname = var.lxc02.hostname
 
     ip_config {
       ipv4 {
-        address = "${var.lxc02_ip}${var.network_cidr}"
+        address = "${var.lxc02.ip}${var.network_cidr}"
         gateway = var.network_gateway
       }
     }

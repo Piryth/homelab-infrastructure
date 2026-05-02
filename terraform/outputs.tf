@@ -2,7 +2,7 @@
 
 output "lxc02_ip" {
   description = "PiHole container IP"
-  value       = var.lxc02_ip
+  value       = var.lxc02.ip
 }
 
 output "lxc02_vmid" {
@@ -12,7 +12,7 @@ output "lxc02_vmid" {
 
 output "lxc01_ip" {
   description = "Docker host container IP"
-  value       = var.lxc01_ip
+  value       = var.lxc01.ip
 }
 
 output "lxc01_vmid" {
@@ -25,10 +25,10 @@ output "ansible_inventory" {
   value = <<-EOT
     # Auto-generated from Terraform outputs
     [pihole]
-    ${var.lxc02_hostname} ansible_host=${var.lxc02_ip}
+    ${var.lxc02.hostname} ansible_host=${var.lxc02.ip}
 
     [lxc01_hosts]
-    ${var.lxc01_hostname} ansible_host=${var.lxc01_ip}
+    ${var.lxc01.hostname} ansible_host=${var.lxc01.ip}
 
     [lxc:children]
     pihole

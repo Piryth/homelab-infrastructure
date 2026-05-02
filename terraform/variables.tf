@@ -84,7 +84,7 @@ variable "lxc01" {
 
 variable "lxc02" {
   type = object({
-    vm_id        = number
+    vm_id       = number
     node        = string
     ip          = string
     hostname    = string
@@ -97,13 +97,15 @@ variable "lxc02" {
   })
 }
 
+# -----------------------------------------------------------------------------
+# VM01 - OPNSense
+# -----------------------------------------------------------------------------
 
-
-
-variable "opnsense" {
+variable "vm01" {
   type = object({
     vm_id       = number
     name        = string
+    node        = string
     iso         = string
     cores       = number
     memory      = number

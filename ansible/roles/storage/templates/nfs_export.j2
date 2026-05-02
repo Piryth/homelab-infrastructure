@@ -1,0 +1,11 @@
+# Managed by Ansible — do not edit manually
+# NFS export for mergerfs pool
+# 
+# Notes on hardlink support:
+#   - 'no_subtree_check' is required for FUSE filesystems like mergerfs
+#   - 'fsid' provides a stable filesystem identifier (mergerfs has no real fsid)
+#   - Hardlinks work within a single mergerfs branch; cross-branch hardlinks
+#     are NOT supported by mergerfs regardless of NFS configuration
+{{ mergerfs_pool_path }} {{ nfs_export_network }}(
+  {{- nfs_export_opts | join(',') -}}
+)

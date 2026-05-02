@@ -58,7 +58,11 @@ lxc02 = {
     template    = "local-lvm:debian-13-standard_13.1-2_amd64.tar.zst"
 }
 
-opnsense = {
+
+# -----------------------------------------------------------------------------
+# VM01 - OPNSense
+# -----------------------------------------------------------------------------
+vm01 = {
   vm_id      = 100
   name       = "opnsense"
   iso        = "local:iso/OPNsense-24.7-dvd-amd64.iso"
@@ -67,4 +71,5 @@ opnsense = {
   disk_size  = 20
   wan_bridge = "vmbr0"
   lan_bridge = "vmbr1"
+  node       = "pve01"
 }

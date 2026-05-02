@@ -1,0 +1,39 @@
+# roles/pve_storage/defaults/main.yml
+---
+# Disk partition pattern
+disk_pattern: "/dev/sd*1"
+
+# Filesystem type for individual disks
+disk_fstype: ext4
+
+# Mount options for individual disks
+disk_mount_opts: defaults,nofail,noatime
+
+# Base path for individual disk mounts
+disk_mount_base: /mnt/disks
+
+# MergerFS pool path
+mergerfs_pool_path: /mnt/pool
+
+# mergerfs options — crossdir is required for hardlinks across dirs on same branch
+mergerfs_opts: "defaults,allow_other,use_ino,cache.files=off,category.create=epmfs,moveonenospc=true,minfreespace=32G,fsname=mergerfs"
+# NFS export network (e.g. single host, subnet, or wildcard)
+# Examples:
+#   "192.168.1.0/24"  → entire subnet
+#   "192.168.1.50"    → single client
+#   "*"               → anyone (not recommended)
+nfs_export_network: "192.168.1.0/24"
+
+# NFS export options
+# - rw               : read/write access
+# - sync             : write to disk before replying (data safety)
+# - no_subtree_check : required for FUSE/mergerfs, avoids file handle issues
+# - no_root_squash   : preserves root permissions (needed for hardlink ops)
+# - fsid             : stable FS identifier; mergerfs has no persistent fsid
+nfs_export_opts:
+  - rw
+  - sync
+  - no_subtree_check
+  - no_root_squash
+  - fsid=42
+

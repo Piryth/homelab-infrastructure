@@ -2,4 +2,4 @@
 - hosts: pve
   become: true
   roles:
-    - role: pve_storage
+    - role: storage

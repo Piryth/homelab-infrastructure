@@ -1,0 +1,28 @@
+---
+- name: Install NFS client packages
+  ansible.builtin.apt:
+    name:
+      - nfs-common
+    state: present
+    update_cache: true
+
+- name: Ensure mount point exists
+  ansible.builtin.file:
+    path: "{{ nfs_mount_path }}"
+    state: directory
+    mode: "0755"
+    owner: root
+    group: root
+
+- name: Mount NFS share
+  ansible.posix.mount:
+    path: "{{ nfs_mount_path }}"
+    src: "{{ nfs_server_ip }}:{{ nfs_export_path }}"
+    fstype: nfs
+    opts: "{{ nfs_mount_opts }}"
+    state: mounted
+  notify: Verify NFS mount
+
+- name: Run hardlink check
+  ansible.builtin.import_tasks: hardlink_check.yml
+  when: nfs_hardlink_check | bool

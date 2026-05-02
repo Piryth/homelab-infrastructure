@@ -1,0 +1,6 @@
+---
+- name: Verify NFS mount
+  ansible.builtin.command:
+    cmd: mountpoint -q {{ nfs_mount_path }}
+  changed_when: false
+  failed_when: false

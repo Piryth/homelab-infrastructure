@@ -1,19 +1,19 @@
-resource "proxmox_virtual_environment_container" "lxc01" {
+resource "proxmox_virtual_environment_container" "lxc03" {
   # -------------------------------------------------------
   # Identity
   # -------------------------------------------------------
-  vm_id     = var.lxc01.vm_id
-  node_name = var.lxc01.node
+  vm_id     = var.lxc03.vm_id
+  node_name = var.lxc03.node
 
-  description = "Docker application host"
+  description = "PiHole + Unbound DNS resolver"
 
-  tags = ["docker", "apps"]
+  tags = ["dns", "pihole", "infrastructure"]
 
   # -------------------------------------------------------
-  # Template
+  # Template (only used on first create, ignored on import)
   # -------------------------------------------------------
   operating_system {
-    template_file_id = var.lxc01.template
+    template_file_id = var.lxc03.template
     type             = "debian"
   }
 
@@ -21,20 +21,20 @@ resource "proxmox_virtual_environment_container" "lxc01" {
   # Compute
   # -------------------------------------------------------
   cpu {
-    cores = var.lxc01.cores
+    cores = var.lxc03.cores
   }
 
   memory {
-    dedicated = var.lxc01.memory
-    swap      = var.lxc01.swap
+    dedicated = var.lxc03.memory
+    swap      = var.lxc03.swap
   }
 
   # -------------------------------------------------------
   # Storage
   # -------------------------------------------------------
   disk {
-    datastore_id = var.lxc01.storage
-    size         = var.lxc01.disk_size
+    datastore_id = var.lxc03.storage
+    size         = var.lxc03.disk_size
   }
 
   # -------------------------------------------------------
@@ -47,16 +47,17 @@ resource "proxmox_virtual_environment_container" "lxc01" {
   }
 
   initialization {
-    hostname = var.lxc01.hostname
+    hostname = var.lxc03.hostname
+
     ip_config {
       ipv4 {
-        address = "${var.lxc01.ip}${var.network_cidr}"
+        address = "${var.lxc03.ip}${var.network_cidr}"
         gateway = var.network_gateway
       }
     }
 
     dns {
-      servers = [var.lxc02.ip, var.network_gateway]
+      servers = ["127.0.0.1", var.network_gateway]
       domain  = "lan"
     }
 
@@ -66,35 +67,30 @@ resource "proxmox_virtual_environment_container" "lxc01" {
   }
 
   # -------------------------------------------------------
-  # Options — nesting REQUIRED for Docker-in-LXC
+  # Options
   # -------------------------------------------------------
   started       = true
   start_on_boot = true
   unprivileged  = true
 
   features {
-    nesting = true
-    keyctl  = true 
+    nesting = false
   }
 
-  mount_point {
-  volume = "/mnt/nas"
-  path   = "/mnt/nas"
-  shared = false
-  }
-
-console {
+  console {
   enabled   = true
   tty_count = 2
   type      = "tty"
   }
 
   # -------------------------------------------------------
-  # Lifecycle
+  # Lifecycle — prevent accidental destruction
   # -------------------------------------------------------
   lifecycle {
     prevent_destroy = true
 
+    # Ignore changes that PVE may drift on, or that we manage
+    # outside Terraform during the initial import phase.
     ignore_changes = [
       operating_system,
       initialization,

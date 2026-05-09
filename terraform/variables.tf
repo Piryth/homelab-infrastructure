@@ -98,19 +98,38 @@ variable "lxc02" {
 }
 
 # -----------------------------------------------------------------------------
-# VM01 - OPNSense
+# LXC 03: Wireguard
 # -----------------------------------------------------------------------------
 
-variable "vm01" {
+variable "lxc03" {
   type = object({
     vm_id       = number
-    name        = string
     node        = string
-    iso         = string
+    ip          = string
+    hostname    = string
     cores       = number
     memory      = number
     disk_size   = number
-    wan_bridge  = string
-    lan_bridge  = string
+    swap        = number
+    storage     = string
+    template    = string
   })
 }
+
+# -----------------------------------------------------------------------------
+# VM01 - OPNSense
+# -----------------------------------------------------------------------------
+
+# variable "vm01" {
+#   type = object({
+#     vm_id       = number
+#     name        = string
+#     node        = string
+#     iso         = string
+#     cores       = number
+#     memory      = number
+#     disk_size   = number
+#     wan_bridge  = string
+#     lan_bridge  = string
+#   })
+# }

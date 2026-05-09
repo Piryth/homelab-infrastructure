@@ -16,7 +16,7 @@ disk_mount_base: /mnt/disks
 mergerfs_pool_path: /mnt/pool
 
 # mergerfs options — crossdir is required for hardlinks across dirs on same branch
-mergerfs_opts: "defaults,allow_other,use_ino,cache.files=off,category.create=epmfs,moveonenospc=true,minfreespace=32G,fsname=mergerfs"
+mergerfs_opts: "defaults,allow_other,use_ino,cache.files=off,category.create=epmfs,moveonenospc=true,minfreespace=128G,fsname=mergerfs"
 # NFS export network (e.g. single host, subnet, or wildcard)
 # Examples:
 #   "192.168.1.0/24"  → entire subnet

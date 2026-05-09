@@ -53,8 +53,7 @@ services:
       SMTP_AUTHTYPE: LOGIN
       SMTP_NAME: "{{ '{{ SMTP_NAME }}' }}"
       SMTP_PASSWORD: "{{ '{{ SMTP_PASSWORD }}' }}"
-      # onlyoffice
-      ONLYOFFICE_JWT_SECRET={{ onlyoffice_secret }}
+
     networks:
       nextcloud-internal:
         aliases:

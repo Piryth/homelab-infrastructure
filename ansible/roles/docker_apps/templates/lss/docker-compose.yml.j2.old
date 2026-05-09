@@ -59,7 +59,7 @@ services:
       PGID: 1000
     volumes:
       - '/data/config/qbittorrent:/config'
-      - '/data/lss:/data'
+      - '/mnt/pool/data:/data'
     depends_on:
       gluetun:
         condition: service_healthy
@@ -97,6 +97,40 @@ services:
     restart: unless-stopped
     env_file:
       - .env
+  radarr:
+    image: 'lscr.io/linuxserver/radarr:latest'
+    container_name: radarr
+    networks:
+      lss_network: null
+    ports:
+      - '7878:7878'
+    environment:
+      TZ: France/Paris
+      PUID: 1000
+      PGID: 1000
+    volumes:
+      - '/data/config/radarr:/config'
+      - '/mnt/pool/data:/data'
+    restart: unless-stopped
+    env_file:
+      - .env
+  sonarr:
+    image: 'lscr.io/linuxserver/sonarr:latest'
+    container_name: sonarr
+    networks:
+      lss_network: null
+    ports:
+      - '8989:8989'
+    environment:
+      TZ: France/Paris
+      PUID: 1000
+      PGID: 1000
+    volumes:
+      - '/data/config/sonarr:/config'
+      - '/mnt/pool/data:/data'
+    restart: unless-stopped
+    env_file:
+      - .env
   lidarr:
     image: 'lscr.io/linuxserver/lidarr:latest'
     container_name: lidarr
@@ -104,13 +138,47 @@ services:
       - '8686:8686'
     volumes:
       - '/data/config/lidarr:/config'
-      - '/data/lss:/data'
+      - '/mnt/pool/data:/data'
     restart: unless-stopped
     environment:
       PUID: 1000
       PGID: 1000
     networks:
       lss_network: null
+    env_file:
+      - .env
+  jellyfin:
+    image: 'jellyfin/jellyfin:latest'
+    container_name: jellyfin
+    ports:
+      - '8096:8096'
+    networks:
+      lss_network: null
+    environment:
+      TZ: Europe/Paris
+      PUID: 1000
+      PGID: 1000
+    volumes:
+      - '/data/config/jellyfin:/config'
+      - '/data/config/jellyfin/cache:/cache'
+      - '/mnt/pool/data/media:/media:ro'
+    restart: unless-stopped
+    env_file:
+      - .env
+  jellyseerr:
+    image: 'fallenbagel/jellyseerr:latest'
+    container_name: jellyseerr
+    ports:
+      - '5055:5055'
+    networks:
+      lss_network: null
+    environment:
+      TZ: Europe/Paris
+      PUID: 1000
+      PGID: 1000
+    volumes:
+      - '/data/config/jellyseerr:/app/config'
+    restart: unless-stopped
     env_file:
       - .env
   recyclarr:

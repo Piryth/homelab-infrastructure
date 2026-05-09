@@ -58,6 +58,23 @@ lxc02 = {
     template    = "local-lvm:debian-13-standard_13.1-2_amd64.tar.zst"
 }
 
+# -----------------------------------------------------------------------------
+# LXC03 - DNS host
+# -----------------------------------------------------------------------------
+lxc03 = {
+    vm_id       = 102
+    node        = "pve01"
+    ip          = "192.168.1.233"
+    hostname    = "lxc03"
+    cores       = 1
+    memory      = 64
+    disk_size   = 1
+    swap        = 64
+    storage     = "local-lvm"
+    template    = "local-lvm:debian-13-standard_13.1-2_amd64.tar.zst"
+}
+
+
 
 # -----------------------------------------------------------------------------
 # VM01 - OPNSense

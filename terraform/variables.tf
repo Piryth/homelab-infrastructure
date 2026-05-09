@@ -61,123 +61,75 @@ variable "ssh_public_keys" {
 }
 
 # -----------------------------------------------------------------------------
+# LXC01 : Docker Host
+# -----------------------------------------------------------------------------
+variable "lxc01" {
+  type = object({
+    vm_id        = number
+    node        = string
+    ip          = string
+    hostname    = string
+    cores       = number
+    memory      = number
+    disk_size   = number
+    swap        = number
+    storage     = string
+    template    = string
+  })
+}
+
+# -----------------------------------------------------------------------------
 # LXC: PiHole
 # -----------------------------------------------------------------------------
-variable "lxc02_vmid" {
-  description = "VMID for the PiHole LXC container"
-  type        = number
-}
 
-variable "lxc02_node" {
-  description = "PVE node hosting PiHole"
-  type        = string
-}
-
-variable "lxc02_ip" {
-  description = "Static IP for PiHole container"
-  type        = string
-  default     = "192.168.1.20"
-}
-
-variable "lxc02_hostname" {
-  description = "Hostname for PiHole container"
-  type        = string
-  default     = "pihole"
-}
-
-variable "lxc02_cores" {
-  description = "CPU cores for PiHole"
-  type        = number
-  default     = 1
-}
-
-variable "lxc02_memory" {
-  description = "Memory in MB for PiHole"
-  type        = number
-  default     = 512
-}
-
-variable "lxc02_swap" {
-  description = "Swap in MB for PiHole"
-  type        = number
-  default     = 256
-}
-
-variable "lxc02_disk_size" {
-  description = "Root disk size in GB for PiHole"
-  type        = number
-  default     = 8
-}
-
-variable "lxc02_storage" {
-  description = "PVE storage pool for PiHole root disk"
-  type        = string
-  default     = "local-lvm"
-}
-
-variable "lxc02_template" {
-  description = "LXC template used for PiHole (for reference, not changed on import)"
-  type        = string
-  default     = "local:vztmpl/debian-12-standard_12.7-1_amd64.tar.zst"
+variable "lxc02" {
+  type = object({
+    vm_id       = number
+    node        = string
+    ip          = string
+    hostname    = string
+    cores       = number
+    memory      = number
+    disk_size   = number
+    swap        = number
+    storage     = string
+    template    = string
+  })
 }
 
 # -----------------------------------------------------------------------------
-# LXC: Docker Host
+# LXC 03: Wireguard
 # -----------------------------------------------------------------------------
-variable "lxc01_vmid" {
-  description = "VMID for the Docker LXC container"
-  type        = number
+
+variable "lxc03" {
+  type = object({
+    vm_id       = number
+    node        = string
+    ip          = string
+    hostname    = string
+    cores       = number
+    memory      = number
+    disk_size   = number
+    swap        = number
+    storage     = string
+    template    = string
+  })
 }
 
-variable "lxc01_node" {
-  description = "PVE node hosting the Docker container"
-  type        = string
-}
+# -----------------------------------------------------------------------------
+# VM01 - OPNSense
+# -----------------------------------------------------------------------------
 
-variable "lxc01_ip" {
-  description = "Static IP for Docker container"
-  type        = string
-  default     = "192.168.1.30"
-}
-
-variable "lxc01_hostname" {
-  description = "Hostname for Docker container"
-  type        = string
-  default     = "docker"
-}
-
-variable "lxc01_cores" {
-  description = "CPU cores for Docker host"
-  type        = number
-  default     = 2
-}
-
-variable "lxc01_memory" {
-  description = "Memory in MB for Docker host"
-  type        = number
-  default     = 2048
-}
-
-variable "lxc01_swap" {
-  description = "Swap in MB for Docker host"
-  type        = number
-  default     = 512
-}
-
-variable "lxc01_disk_size" {
-  description = "Root disk size in GB for Docker host"
-  type        = number
-  default     = 32
-}
-
-variable "lxc01_storage" {
-  description = "PVE storage pool for Docker root disk"
-  type        = string
-  default     = "local-lvm"
-}
-
-variable "lxc01_template" {
-  description = "LXC template used for Docker host"
-  type        = string
-  default     = "local:vztmpl/debian-12-standard_12.7-1_amd64.tar.zst"
-}
+# variable "vm01" {
+#   type = object({
+#     vm_id       = number
+#     name        = string
+#     node        = string
+#     iso         = string
+#     cores       = number
+#     memory      = number
+#     disk_size   = number
+#     wan_bridge  = string
+#     lan_bridge  = string
+#   })
+# }

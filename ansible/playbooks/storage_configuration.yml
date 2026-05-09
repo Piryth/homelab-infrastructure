@@ -1,0 +1,13 @@
+- hosts:
+    - rpi01
+  become: true
+  roles:
+    - role: storage
+      tags: storage
+
+- hosts:
+    - pve
+  become: true
+  roles:
+    - role: nfs_client
+      tags: nfs_client

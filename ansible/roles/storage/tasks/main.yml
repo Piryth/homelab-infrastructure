@@ -72,11 +72,11 @@
         return_content: true
       register: mergerfs_release
 
-    - name: Set mergerfs .deb URL
+    - name: Set mergerfs .deb URL  # ARM64 (aarch64) for Raspberry Pi 64-bit OS
       ansible.builtin.set_fact:
         mergerfs_deb_url: >-
           {{ mergerfs_release.json.assets
-             | selectattr('name', 'match', '.*bookworm_amd64\.deb$')
+             | selectattr('name', 'match', '.*bookworm_aarch64\.deb$')
              | map(attribute='browser_download_url')
              | first }}
 
@@ -115,3 +115,33 @@
     fstype: fuse.mergerfs
     opts: "{{ mergerfs_opts }}"
     state: mounted
+
+# --- NFS Server ---
+
+- name: Install NFS server packages
+  ansible.builtin.apt:
+    name:
+      - nfs-kernel-server
+    state: present
+    update_cache: true
+
+- name: Ensure /etc/exports.d directory exists
+  ansible.builtin.file:
+    path: /etc/exports.d
+    state: directory
+    mode: "0755"
+
+- name: Configure NFS export for mergerfs pool
+  ansible.builtin.template:
+    src: nfs_export.j2
+    dest: /etc/exports.d/mergerfs_pool.exports
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Reload NFS exports
+
+- name: Ensure NFS server is enabled and started
+  ansible.builtin.systemd:
+    name: nfs-kernel-server
+    enabled: true
+    state: started

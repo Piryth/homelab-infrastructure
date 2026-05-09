@@ -1,0 +1,57 @@
+---
+- name: Mise à jour du cache apt et upgrade des paquets
+  ansible.builtin.apt:
+    update_cache: yes
+    upgrade: dist
+    cache_valid_time: 3600
+
+- name: Installation de sudo (souvent absent des conteneurs LXC minimaux)
+  ansible.builtin.apt:
+    name: sudo
+    state: present
+
+- name: Création de l'utilisateur administrateur
+  ansible.builtin.user:
+    name: "{{ admin_username }}"
+    shell: /bin/bash
+    groups: sudo
+    append: yes
+
+- name: Ajout de la clé SSH publique
+  ansible.builtin.authorized_key:
+    user: "{{ admin_username }}"
+    state: present
+    key: "{{ admin_ssh_pub_key }}"
+
+- name: Gestion du conflit ssh.socket (Spécifique Debian/Ubuntu récents)
+  block:
+    - name: Arrêter et désactiver ssh.socket
+      ansible.builtin.systemd:
+        name: ssh.socket
+        state: stopped
+        enabled: false
+        masked: yes
+      failed_when: false # Ne pas échouer si le socket n'existe pas
+
+    - name: S'assurer que le service ssh (standard) est activé
+      ansible.builtin.systemd:
+        name: ssh
+        enabled: yes
+        state: started
+
+- name: Application de la configuration SSH durcie
+  ansible.builtin.template:
+    src: sshd_config.j2
+    dest: /etc/ssh/sshd_config
+    owner: root
+    group: root
+    mode: '0644'
+    validate: /usr/sbin/sshd -t -f %s
+  notify: Restart ssh service
+
+- name: S'assurer que sudo ne demande pas de mot de passe (optionnel)
+  ansible.builtin.lineinfile:
+    path: /etc/sudoers
+    regexp: "^%sudo"
+    line: "%sudo ALL=(ALL) NOPASSWD:ALL"
+    validate: '/usr/sbin/visudo -cf %s'

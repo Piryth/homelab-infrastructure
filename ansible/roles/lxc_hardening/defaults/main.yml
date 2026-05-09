@@ -1,0 +1,7 @@
+admin_username: "landru"
+admin_ssh_pub_key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIkG73k0KuJt3QBztffN+JQIHTeh2j+iU2Z8ya+Gppzr landru.wrongdoer043@passmail.com"
+
+# Configuration SSH
+ssh_port: 53821
+ssh_permit_root_login: "no"
+ssh_password_authentication: "no"

@@ -1,0 +1,6 @@
+- name: Harden SSH config (lxc03 only)
+  hosts: 
+    - lxc03
+  become: true
+  roles:
+    - lxc_hardening

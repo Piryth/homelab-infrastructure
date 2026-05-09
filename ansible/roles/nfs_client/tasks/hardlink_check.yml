@@ -1,0 +1,42 @@
+---
+- name: Create a test file for hardlink check
+  ansible.builtin.tempfile:
+    path: "{{ nfs_mount_path }}"
+    state: file
+    prefix: hardlink_test_
+  register: hardlink_test_file
+
+- name: Create hardlink from test file
+  ansible.builtin.command:
+    cmd: "ln {{ hardlink_test_file.path }} {{ hardlink_test_file.path }}_hardlink"
+  changed_when: false
+
+- name: Verify hardlink inode matches original
+  ansible.builtin.command:
+    cmd: "stat -c '%i' {{ hardlink_test_file.path }}_hardlink"
+  register: hardlink_inode
+  changed_when: false
+
+- name: Get original file inode
+  ansible.builtin.command:
+    cmd: "stat -c '%i' {{ hardlink_test_file.path }}"
+  register: original_inode
+  changed_when: false
+
+- name: Assert inodes match
+  ansible.builtin.assert:
+    that:
+      - original_inode.stdout == hardlink_inode.stdout
+    fail_msg: >
+      Hardlink inode mismatch! NFS hardlinks may not be working correctly.
+      Original inode: {{ original_inode.stdout }},
+      Hardlink inode: {{ hardlink_inode.stdout }}
+    success_msg: "Hardlink check passed — inodes match ({{ original_inode.stdout }})"
+
+- name: Clean up hardlink test files
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - "{{ hardlink_test_file.path }}"
+    - "{{ hardlink_test_file.path }}_hardlink"

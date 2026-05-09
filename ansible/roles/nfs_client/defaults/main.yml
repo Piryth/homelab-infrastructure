@@ -1,0 +1,6 @@
+---
+nfs_server_ip: "192.168.1.240"
+nfs_export_path: "/mnt/pool"
+nfs_mount_path: "/mnt/pool"
+nfs_mount_opts: "rw,sync,hard,intr,nfsvers=3"
+nfs_hardlink_check: true

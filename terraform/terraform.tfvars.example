@@ -26,29 +26,67 @@ ssh_public_keys = [
 
 
 # -----------------------------------------------------------------------------
-# LXC02 - Docker host
+# LXC01 - Docker host
 # -----------------------------------------------------------------------------
-lxc01_vmid      = 101
-lxc01_node      = "pve2"
-lxc01_ip        = "192.168.1.30"
-lxc01_hostname  = "docker"
-lxc01_cores     = 2
-lxc01_memory    = 2048
-lxc01_swap      = 512
-lxc01_disk_size = 32
-lxc01_storage   = "local-lvm"
-lxc01_template  = "local:vztmpl/debian-12-standard_12.7-1_amd64.tar.zst"
+lxc01 = {
+    vm_id       = 100
+    node        = "pve01"
+    ip          = "192.168.1.231"
+    hostname    = "lxc01"
+    cores       = 3
+    memory      = 6000
+    disk_size   = 128
+    swap        = 4096
+    storage     = "local-lvm"
+    template    = "local-lvm:debian-13-standard_13.1-2_amd64.tar.zst"
+}
+
 
 # -----------------------------------------------------------------------------
 # LXC02 - DNS host
 # -----------------------------------------------------------------------------
-lxc02_vmid      = 100
-lxc02_node      = "pve1"
-lxc02_ip        = "192.168.1.20"
-lxc02_hostname  = "pihole"
-lxc02_cores     = 1
-lxc02_memory    = 512
-lxc02_swap      = 256
-lxc02_disk_size = 8
-lxc02_storage   = "local-lvm"
-lxc02_template  = "local:vztmpl/debian-12-standard_12.7-1_amd64.tar.zst"
+lxc02 = {
+    vm_id       = 100
+    node        = "pve01"
+    ip          = "192.168.1.232"
+    hostname    = "lxc01"
+    cores       = 3
+    memory      = 6000
+    disk_size   = 128
+    swap        = 4096
+    storage     = "local-lvm"
+    template    = "local-lvm:debian-13-standard_13.1-2_amd64.tar.zst"
+}
+
+# -----------------------------------------------------------------------------
+# LXC03 - DNS host
+# -----------------------------------------------------------------------------
+lxc03 = {
+    vm_id       = 102
+    node        = "pve01"
+    ip          = "192.168.1.233"
+    hostname    = "lxc03"
+    cores       = 1
+    memory      = 64
+    disk_size   = 1
+    swap        = 64
+    storage     = "local-lvm"
+    template    = "local-lvm:debian-13-standard_13.1-2_amd64.tar.zst"
+}
+
+
+
+# -----------------------------------------------------------------------------
+# VM01 - OPNSense
+# -----------------------------------------------------------------------------
+vm01 = {
+  vm_id      = 100
+  name       = "opnsense"
+  iso        = "local:iso/OPNsense-24.7-dvd-amd64.iso"
+  cores      = 2
+  memory     = 2048
+  disk_size  = 20
+  wan_bridge = "vmbr0"
+  lan_bridge = "vmbr1"
+  node       = "pve01"
+}

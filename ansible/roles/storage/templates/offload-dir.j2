@@ -1,0 +1,6 @@
+#!/bin/sh
+# Managed by Ansible — do not edit manually
+# Offload one library folder by hand: offload-dir "/data/local/media/movies/Title (Year)"
+# Dry run first: homelab-offload --path "<folder>"
+[ -n "$1" ] || { echo "usage: offload-dir <library folder>" >&2; exit 2; }
+exec /usr/bin/python3 /usr/local/bin/homelab-offload --path "$1" --run

@@ -1,0 +1,10 @@
+# Managed by Ansible — do not edit manually
+[Unit]
+Description=Run qbit-diskguard every {{ storage_diskguard_interval }}
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec={{ storage_diskguard_interval }}
+
+[Install]
+WantedBy=timers.target

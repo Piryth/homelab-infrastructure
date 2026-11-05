@@ -1,0 +1,61 @@
+# Managed by Ansible — do not edit manually
+# Evaluated by Prometheus; firing alerts show on the Grafana dashboards (ALERTS series).
+groups:
+  - name: homelab
+    rules:
+      - alert: TargetDown
+        expr: up == 0
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: "{{ '{{' }} $labels.job {{ '}}' }} is not answering scrapes"
+
+      - alert: LocalDiskLow
+        expr: node_filesystem_avail_bytes{mountpoint="{{ observability_local_disk_mount }}"} < {{ observability_local_disk_warn_gb }} * 1024^3
+        for: 15m
+        labels: {severity: warning}
+        annotations:
+          summary: "{{ observability_local_disk_mount }} has less than {{ observability_local_disk_warn_gb }} GiB free (downloads pause soon)"
+
+      - alert: RootDiskHigh
+        expr: 1 - node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"} > 0.85
+        for: 15m
+        labels: {severity: warning}
+        annotations:
+          summary: "lxc01 root disk above 85 % (configs, Docker images, rclone cache, metrics)"
+
+      - alert: HostMemoryHigh
+        expr: 1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes > 0.9
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: "lxc01 memory above 90 %"
+
+      - alert: ContainerRestarting
+        expr: changes(container_start_time_seconds{name!=""}[15m]) > 2
+        labels: {severity: warning}
+        annotations:
+          summary: "{{ '{{' }} $labels.name {{ '}}' }} restarted more than twice in 15 minutes"
+
+      - alert: CaddyHigh5xx
+        expr: >
+          sum(rate(caddy_http_request_duration_seconds_count{code=~"5.."}[10m]))
+          / clamp_min(sum(rate(caddy_http_request_duration_seconds_count[10m])), 1e-9) > 0.05
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: "More than 5 % of requests through Caddy fail with a 5xx"
+
+      - alert: OffloadFailing
+        expr: homelab_offload_last_run_success == 0
+        for: 1h
+        labels: {severity: warning}
+        annotations:
+          summary: "homelab-offload runs are failing (journalctl -u homelab-offload)"
+
+      - alert: OffloadStale
+        expr: time() - homelab_offload_last_run_timestamp_seconds > 3 * 3600
+        for: 15m
+        labels: {severity: warning}
+        annotations:
+          summary: "homelab-offload has not run for 3 hours (timer stopped or remote not mounted)"

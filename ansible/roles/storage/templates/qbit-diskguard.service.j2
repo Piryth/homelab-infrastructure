@@ -1,0 +1,9 @@
+# Managed by Ansible — do not edit manually
+[Unit]
+Description=Pause qBittorrent downloads when {{ storage_local_dir }} is nearly full
+After=docker.service
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/qbit-diskguard.env
+ExecStart=/usr/bin/python3 /usr/local/bin/qbit-diskguard

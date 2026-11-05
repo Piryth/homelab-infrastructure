@@ -1,0 +1,78 @@
+# roles/docker_apps/tasks/observability.yml — imported with the "observability" tag
+---
+- name: Create observability directories
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ item.owner | default('root') }}"
+    group: "{{ item.group | default('root') }}"
+    mode: "{{ item.mode | default('0755') }}"
+  loop:
+    - { path: "{{ observability_base_dir }}", mode: "0750" }
+    - { path: "{{ observability_base_dir }}/config" }
+    - { path: "{{ observability_base_dir }}/dashboards" }
+    - { path: "{{ observability_textfile_dir }}" }
+    # Data folders owned by each image's own user, so no container runs as root for it
+    - { path: "{{ observability_data_dir }}/prometheus", owner: "65534", group: "65534", mode: "0750" }
+    - { path: "{{ observability_data_dir }}/loki", owner: "10001", group: "10001", mode: "0750" }
+    - { path: "{{ observability_data_dir }}/tempo", owner: "10001", group: "10001", mode: "0750" }
+    - { path: "{{ observability_data_dir }}/grafana", owner: "472", group: "0", mode: "0750" }
+    - { path: "{{ observability_data_dir }}/alloy", mode: "0750" }
+
+- name: Template observability configuration
+  ansible.builtin.template:
+    src: "observability/{{ item.src }}"
+    dest: "{{ observability_base_dir }}/{{ item.dest }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - { src: docker-compose.yml.j2, dest: docker-compose.yml }
+    - { src: prometheus.yml.j2, dest: config/prometheus.yml, service: prometheus }
+    - { src: alerts.yml.j2, dest: config/alerts.yml, service: prometheus }
+    - { src: loki-config.yml.j2, dest: config/loki-config.yml, service: loki }
+    - { src: tempo.yml.j2, dest: config/tempo.yml, service: tempo }
+    - { src: config.alloy.j2, dest: config/config.alloy, service: alloy }
+    - { src: datasources.yml.j2, dest: config/datasources.yml, service: grafana }
+    - { src: dashboards.yml.j2, dest: config/dashboards.yml, service: grafana }
+  loop_control:
+    label: "{{ item.dest }}"
+  register: observability_config
+
+- name: Template Grafana admin credentials
+  ansible.builtin.template:
+    src: observability/grafana.env.j2
+    dest: "{{ observability_base_dir }}/.env"
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+
+# Copied, not templated: dashboard JSON uses {{ }} for Grafana legends
+- name: Copy Grafana dashboards
+  ansible.builtin.copy:
+    src: observability/dashboards/
+    dest: "{{ observability_base_dir }}/dashboards/"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Deploy observability stack
+  community.docker.docker_compose_v2:
+    project_src: "{{ observability_base_dir }}"
+    state: present
+
+# Config files are bind-mounted: compose does not see their content change
+- name: Restart services whose configuration changed
+  community.docker.docker_compose_v2:
+    project_src: "{{ observability_base_dir }}"
+    state: restarted
+    services: "{{ observability_changed_services }}"
+  vars:
+    observability_changed_services: >-
+      {{ observability_config.results
+         | selectattr('changed')
+         | map(attribute='item.service')
+         | select('defined')
+         | unique | list }}
+  when: observability_changed_services | length > 0

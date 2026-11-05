@@ -1,0 +1,18 @@
+# Managed by Ansible — do not edit manually
+[Unit]
+Description=mergerfs pool (local + remote storage)
+Requires={{ storage_rclone_unit }}.service
+After={{ storage_rclone_unit }}.service
+RequiresMountsFor={{ storage_local_dir }}
+
+[Service]
+ExecStart=/usr/bin/mergerfs -f \
+  -o {{ mergerfs_opts }} \
+  {{ mergerfs_branches }} {{ mergerfs_pool_path }}
+# Only report started once the pool is really mounted (Docker waits for this)
+ExecStartPost=/bin/sh -c 'for i in $$(seq {{ mergerfs_mount_timeout }}); do mountpoint -q {{ mergerfs_pool_path }} && exit 0; sleep 1; done; exit 1'
+ExecStop=/bin/fusermount3 -uz {{ mergerfs_pool_path }}
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

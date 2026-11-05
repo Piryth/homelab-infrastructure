@@ -1,0 +1,15 @@
+# Managed by Ansible — do not edit manually
+apiVersion: 1
+
+providers:
+  - name: homelab
+    orgId: 1
+    folder: Homelab
+    type: file
+    disableDeletion: false
+    # Edit in the UI to try things, then export the JSON into the repo:
+    # changes made only in the UI are overwritten on the next deploy
+    editable: true
+    updateIntervalSeconds: 60
+    options:
+      path: /var/lib/grafana/dashboards

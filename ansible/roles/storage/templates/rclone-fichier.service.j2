@@ -1,0 +1,16 @@
+# Managed by Ansible — do not edit manually
+[Unit]
+Description=rclone 1Fichier mount (crypt)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=notify
+ExecStart=/usr/bin/rclone mount fichier-crypt: {{ storage_fichier_mount }} \
+  --config {{ storage_rclone_config }} \
+  {{ storage_rclone_mount_opts | join(' \\\n  ') }}
+ExecStop=/bin/fusermount3 -uz {{ storage_fichier_mount }}
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

@@ -1,40 +1,33 @@
 x-environment:
   PUID: 1000
   PGID: 1000
-  TZ: France/Paris
+  TZ: Europe/Paris
 services:
+
   gluetun:
-    image: 'qmcgaw/gluetun:latest'
+    image: qmcgaw/gluetun
     container_name: gluetun
     cap_add:
       - NET_ADMIN
     devices:
-      - '/dev/net/tun:/dev/net/tun'
+      - /dev/net/tun:/dev/net/tun
+    environment:
+      - VPN_SERVICE_PROVIDER=protonvpn
+      - VPN_TYPE=wireguard
+      - WIREGUARD_PRIVATE_KEY=${WIREGUARD_PRIVATE_KEY}
+      - SERVER_COUNTRIES=France
+    sysctls:
+      - net.ipv4.ip_forward=1
+      - net.ipv6.conf.all.forwarding=1
+    restart: unless-stopped
     networks:
       lss_network: null
     ports:
       - '9090:9090'
       - '6881:6881'
       - '6881:6881/udp'
-    environment:
-      PUID: 1000
-      PGID: 1000
-      VPN_SERVICE_PROVIDER: custom
-      VPN_TYPE: wireguard
-      WIREGUARD_ADDRESSES: 10.2.0.2/32
-      WIREGUARD_PRIVATE_KEY: ${WIREGUARD_PRIVATE_KEY}
-      WIREGUARD_PUBLIC_KEY: ${WIREGUARD_PUBLIC_KEY}
-      VPN_PORT_FORWARDING: 'on'
-      FIREWALL_INPUT_PORTS: '9090'
-      VPN_PORT_FORWARDING_PROVIDER: protonvpn
-      FIREWALL_OUTBOUND_SUBNETS: 10.0.0.0/16
-      VPN_ENDPOINT_PORT: '51820'
-      UPDATER_PERIOD: 24h
-      VPN_ENDPOINT_IP: 45.128.134.194
-      VPN_DNS_ADDRESS: 10.2.0.1
     volumes:
       - '/data/config/gluetun:/gluetun'
-    restart: unless-stopped
     healthcheck:
       test:
         - CMD
@@ -46,8 +39,7 @@ services:
       start_period: 30s
       timeout: 10s
       retries: 3
-    env_file:
-      - .env
+
   qbittorrent:
     image: 'lscr.io/linuxserver/qbittorrent:latest'
     container_name: qbittorrent
@@ -59,7 +51,7 @@ services:
       PGID: 1000
     volumes:
       - '/data/config/qbittorrent:/config'
-      - '/data/lss:/data'
+      - '/mnt/pool/data/torrents:/data/torrents'
     depends_on:
       gluetun:
         condition: service_healthy
@@ -97,6 +89,40 @@ services:
     restart: unless-stopped
     env_file:
       - .env
+  radarr:
+    image: 'lscr.io/linuxserver/radarr:latest'
+    container_name: radarr
+    networks:
+      lss_network: null
+    ports:
+      - '7878:7878'
+    environment:
+      TZ: France/Paris
+      PUID: 1000
+      PGID: 1000
+    volumes:
+      - '/data/config/radarr:/config'
+      - '/mnt/pool/data:/data'
+    restart: unless-stopped
+    env_file:
+      - .env
+  sonarr:
+    image: 'lscr.io/linuxserver/sonarr:latest'
+    container_name: sonarr
+    networks:
+      lss_network: null
+    ports:
+      - '8989:8989'
+    environment:
+      TZ: France/Paris
+      PUID: 1000
+      PGID: 1000
+    volumes:
+      - '/data/config/sonarr:/config'
+      - '/mnt/pool/data:/data'
+    restart: unless-stopped
+    env_file:
+      - .env
   lidarr:
     image: 'lscr.io/linuxserver/lidarr:latest'
     container_name: lidarr
@@ -104,13 +130,47 @@ services:
       - '8686:8686'
     volumes:
       - '/data/config/lidarr:/config'
-      - '/data/lss:/data'
+      - '/mnt/pool/data:/data'
     restart: unless-stopped
     environment:
       PUID: 1000
       PGID: 1000
     networks:
       lss_network: null
+    env_file:
+      - .env
+  jellyfin:
+    image: 'jellyfin/jellyfin:latest'
+    container_name: jellyfin
+    ports:
+      - '8096:8096'
+    networks:
+      lss_network: null
+    environment:
+      TZ: Europe/Paris
+      PUID: 1000
+      PGID: 1000
+    volumes:
+      - '/data/config/jellyfin:/config'
+      - '/data/config/jellyfin/cache:/cache'
+      - '/mnt/pool/data/media:/media:ro'
+    restart: unless-stopped
+    env_file:
+      - .env
+  jellyseerr:
+    image: 'fallenbagel/jellyseerr:latest'
+    container_name: jellyseerr
+    ports:
+      - '5055:5055'
+    networks:
+      lss_network: null
+    environment:
+      TZ: Europe/Paris
+      PUID: 1000
+      PGID: 1000
+    volumes:
+      - '/data/config/jellyseerr:/app/config'
+    restart: unless-stopped
     env_file:
       - .env
   recyclarr:
@@ -133,7 +193,7 @@ services:
     restart: unless-stopped
     volumes:
       - "/data/config/navidrome:/data"
-      - "/data/lss/media/music:/music:ro"
+      - "/mnt/pool/data/media/music:/music:ro"
     networks:
       lss_network: null
 networks:

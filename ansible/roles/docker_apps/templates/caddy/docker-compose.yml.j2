@@ -12,6 +12,13 @@ services:
       - ./caddy_config:/config
     environment:
       - CLOUDFLARE_API_TOKEN={{ caddy_cloudflare_token }}
+{% if caddy_tracing | bool %}
+      # OTLP/gRPC to Tempo on caddy_network (http:// = no TLS inside the Docker network)
+      - OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://tempo:4317
+      - OTEL_SERVICE_NAME=caddy
+      - OTEL_TRACES_SAMPLER=parentbased_traceidratio
+      - OTEL_TRACES_SAMPLER_ARG={{ caddy_tracing_sample_ratio }}
+{% endif %}
     networks:
       - proxy
 

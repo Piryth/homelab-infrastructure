@@ -1,0 +1,209 @@
+# Managed by Ansible (docker_apps role, tag "observability") — do not edit manually
+#
+# Metrics: Prometheus <- node-exporter, cAdvisor, Caddy, the stack itself, Alloy (remote write)
+# Logs:    Alloy -> Loki (every Docker container + systemd units of lxc01)
+# Traces:  Caddy -> Tempo (OTLP), linked from Loki access logs through traceID
+# UI:      Grafana, behind Caddy (caddy_network), no port published on the host
+services:
+  prometheus:
+    image: prom/prometheus:{{ observability_versions.prometheus }}
+    container_name: prometheus
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time={{ observability_prometheus_retention }}
+      # Hard cap so metrics can never fill the Proxmox thin pool
+      - --storage.tsdb.retention.size={{ observability_prometheus_retention_size }}
+      - --web.enable-lifecycle
+      - --web.enable-remote-write-receiver
+      - --web.external-url=https://{{ observability_domains.prometheus }}
+    volumes:
+      - ./config/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./config/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - {{ observability_data_dir }}/prometheus:/prometheus
+    networks:
+      - monitoring
+      - proxy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:9090/-/healthy || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+
+  loki:
+    image: grafana/loki:{{ observability_versions.loki }}
+    container_name: loki
+    restart: unless-stopped
+    command: -config.file=/etc/loki/local-config.yml
+    volumes:
+      - ./config/loki-config.yml:/etc/loki/local-config.yml:ro
+      - {{ observability_data_dir }}/loki:/loki
+    networks:
+      - monitoring
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  tempo:
+    image: grafana/tempo:{{ observability_versions.tempo }}
+    container_name: tempo
+    restart: unless-stopped
+    # Runs as its default uid 10001: Ansible chowns the data folder instead of running as root
+    command: -config.file=/etc/tempo/tempo.yml
+    volumes:
+      - ./config/tempo.yml:/etc/tempo/tempo.yml:ro
+      - {{ observability_data_dir }}/tempo:/var/tempo
+    networks:
+      - monitoring
+      # Caddy sends its traces to tempo:4317 on caddy_network
+      - proxy
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  grafana:
+    image: grafana/grafana:{{ observability_versions.grafana }}
+    container_name: grafana
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - GF_SERVER_ROOT_URL=https://{{ observability_domains.grafana }}
+      - GF_SERVER_DOMAIN={{ observability_domains.grafana }}
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_ANALYTICS_REPORTING_ENABLED=false
+      - GF_ANALYTICS_CHECK_FOR_UPDATES=false
+      - TZ={{ observability_tz }}
+    volumes:
+      - ./config/datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml:ro
+      - ./config/dashboards.yml:/etc/grafana/provisioning/dashboards/dashboards.yml:ro
+      - ./dashboards:/var/lib/grafana/dashboards:ro
+      - {{ observability_data_dir }}/grafana:/var/lib/grafana
+    networks:
+      - monitoring
+      - proxy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/api/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    depends_on:
+      prometheus:
+        condition: service_healthy
+      loki:
+        condition: service_started
+      tempo:
+        condition: service_started
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  alloy:
+    image: grafana/alloy:{{ observability_versions.alloy }}
+    container_name: alloy
+    restart: unless-stopped
+    command:
+      - run
+      - /etc/alloy/config.alloy
+      - --server.http.listen-addr=0.0.0.0:12345
+      # Keeps log read positions across restarts (no duplicated or lost lines)
+      - --storage.path=/var/lib/alloy/data
+    volumes:
+      - ./config/config.alloy:/etc/alloy/config.alloy:ro
+      - {{ observability_data_dir }}/alloy:/var/lib/alloy/data
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      # systemd journal of lxc01: rclone mount, mergerfs, homelab-offload, diskguard...
+      - /var/log/journal:/var/log/journal:ro
+      - /run/log/journal:/run/log/journal:ro
+      - /etc/machine-id:/etc/machine-id:ro
+    networks:
+      - monitoring
+      - proxy
+    depends_on:
+      prometheus:
+        condition: service_healthy
+      loki:
+        condition: service_started
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:{{ observability_versions.cadvisor }}
+    container_name: cadvisor
+    restart: unless-stopped
+    privileged: true
+    command:
+      - --docker_only=true
+      - --housekeeping_interval=30s
+      # Drop expensive metrics nothing uses (lighter on a 3-core container)
+      - --disable_metrics=percpu,sched,tcp,udp,advtcp,hugetlb,referenced_memory,cpu_topology,resctrl,process
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+    networks:
+      - monitoring
+      - proxy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/healthz || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+  # Host network to see lxc01's real interfaces and mounts, but listening only on the
+  # monitoring bridge gateway: reachable by Prometheus, not from the LAN.
+  node-exporter:
+    image: prom/node-exporter:{{ observability_versions.node_exporter }}
+    container_name: node-exporter
+    restart: unless-stopped
+    network_mode: host
+    pid: host
+    command:
+      - --web.listen-address={{ observability_monitoring_gateway }}:9100
+      - --path.procfs=/host/proc
+      - --path.sysfs=/host/sys
+      - --path.rootfs=/rootfs
+      - --collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc|run)($$|/)
+      # Never stat the FUSE mounts: a slow remote would hang the scrape
+      - --collector.filesystem.fs-types-exclude=^(autofs|binfmt_misc|bpf|cgroup2?|configfs|debugfs|devpts|devtmpfs|fuse|fuse\..*|fusectl|hugetlbfs|mqueue|nsfs|overlay|proc|pstore|securityfs|squashfs|sysfs|tmpfs|tracefs)$$
+      # Metrics written by host scripts (homelab-offload)
+      - --collector.textfile.directory=/textfile
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro,rslave
+      - {{ observability_textfile_dir }}:/textfile:ro
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+
+networks:
+  monitoring:
+    name: monitoring
+    driver: bridge
+    ipam:
+      config:
+        - subnet: {{ observability_monitoring_subnet }}
+          gateway: {{ observability_monitoring_gateway }}
+  proxy:
+    name: caddy_network
+    external: true

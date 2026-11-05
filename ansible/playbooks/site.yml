@@ -1,5 +1,4 @@
 ---
-- import_playbook: pve.yml
 - import_playbook: common.yml
 - import_playbook: pihole.yml
 - import_playbook: docker.yml

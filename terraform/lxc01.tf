@@ -72,15 +72,27 @@ resource "proxmox_virtual_environment_container" "lxc01" {
   start_on_boot = true
   unprivileged  = true
 
+  # fuse is REQUIRED for the rclone (1Fichier) and mergerfs mounts.
+  # Changing features other than nesting requires root@pam, not an API token:
+  # set by hand on pve01 (see README), ignored in lifecycle below.
   features {
     nesting = true
-    keyctl  = true 
+    keyctl  = true
+    fuse    = true
   }
 
+  # Local seeding disk (mergerfs branch 1): torrents + hardlinked media.
+  # Mounted at /data/local, NOT /data, so /data/config stays on the rootfs.
+  # Hard cap for media: a full disk never reaches the OS or the app configs.
+  # Created by hand on pve01 (see README): bpg replaces the whole CT when a
+  # disk mount point changes, so it is ignored in lifecycle below.
+  # discard returns freed blocks to the thin pool (local-lvm).
   mount_point {
-  volume = "/mnt/nas"
-  path   = "/mnt/nas"
-  shared = false
+    volume = "local-lvm"
+    size   = "512G"
+    path   = "/data/local"
+
+    mount_options = ["discard"]
   }
 
 console {
@@ -98,6 +110,9 @@ console {
     ignore_changes = [
       operating_system,
       initialization,
+      # Managed by hand via pct set on pve01 (see comments above)
+      mount_point,
+      features,
     ]
   }
 }

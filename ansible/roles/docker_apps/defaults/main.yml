@@ -5,43 +5,109 @@ caddy_cloudflare_token: "{{ vault_cloudflare_token }}"
 
 caddy_reverse_proxies:
   - name: pve01
-    domain: pve.endignous.fr
+    domain: pve.pve01.internal.endignous.fr
     upstream: "192.168.1.230:8006"
     tls_insecure: true
   - name: pihole
-    domain: pihole.endignous.fr
+    domain: pihole.lxc02.internal.endignous.fr
     upstream: "192.168.1.232:80"
-  - name: nextcloud
-    domain: nextcloud.docker.endignous.fr
-    upstream: nextcloud-app:80
-  - name: onlyoffice
-    domain: onlyoffice.docker.endignous.fr
-    upstream: onlyoffice-document-server:80
-  # LSS Media Stack
   - name: jellyfin
-    domain: jellyfin.docker.endignous.fr
+    domain: jellyfin.lxc01.internal.endignous.fr
     upstream: "192.168.1.231:8096"
   - name: jellyseerr
-    domain: jellyseerr.docker.endignous.fr
+    domain: jellyseerr.lxc01.internal.endignous.fr
     upstream: "192.168.1.231:5055"
   - name: sonarr
-    domain: sonarr.docker.endignous.fr
+    domain: sonarr.lxc01.internal.endignous.fr
     upstream: "192.168.1.231:8989"
   - name: radarr
-    domain: radarr.docker.endignous.fr
+    domain: radarr.lxc01.internal.endignous.fr
     upstream: "192.168.1.231:7878"
   - name: lidarr
-    domain: lidarr.docker.endignous.fr
+    domain: lidarr.lxc01.internal.endignous.fr
     upstream: "192.168.1.231:8686"
   - name: prowlarr
-    domain: prowlarr.docker.endignous.fr
+    domain: prowlarr.lxc01.internal.endignous.fr
     upstream: "192.168.1.231:9696"
   - name: qbittorrent
-    domain: qbit.docker.endignous.fr
+    domain: qbit.lxc01.internal.endignous.fr
     upstream: "192.168.1.231:9090"
   - name: flaresolverr
-    domain: flaresolverr.docker.endignous.fr
+    domain: flaresolverr.lxc01.internal.endignous.fr
     upstream: "192.168.1.231:8191"
+  - name: grafana
+    domain: grafana.lxc01.internal.endignous.fr
+    upstream: "192.168.1.231:3000"
+
+# Observability UIs behind Caddy, routed by container name on caddy_network
+# (no port published on the host). Added to the sites only when the stack is enabled.
+observability_reverse_proxies:
+  - name: grafana
+    domain: "{{ observability_domains.grafana }}"
+    upstream: "grafana:3000"
+  - name: prometheus
+    domain: "{{ observability_domains.prometheus }}"
+    upstream: "prometheus:9090"
+  - name: alloy
+    domain: "{{ observability_domains.alloy }}"
+    upstream: "alloy:12345"
+  - name: cadvisor
+    domain: "{{ observability_domains.cadvisor }}"
+    upstream: "cadvisor:8080"
+
+# Every site served by Caddy
+caddy_sites: >-
+  {{ caddy_reverse_proxies
+     + (observability_reverse_proxies if observability_enabled | bool else []) }}
+
+# Caddy telemetry (feeds the observability stack)
+caddy_metrics: "{{ observability_enabled }}"
+caddy_metrics_port: 9180
+caddy_access_logs: true
+caddy_tracing: "{{ observability_enabled }}"
+# Share of requests traced (1.0 = all; lower it if Tempo grows too much)
+caddy_tracing_sample_ratio: 1.0
+
+# Observability stack (tag "observability")
+observability_enabled: true
+observability_base_dir: /opt/docker/observability
+# Persistent data, next to the other app configs (rootfs: keep retention small)
+observability_data_dir: /data/config
+observability_tz: Europe/Paris
+observability_domains:
+  grafana: grafana.lxc01.internal.endignous.fr
+  prometheus: prometheus.lxc01.internal.endignous.fr
+  alloy: alloy.lxc01.internal.endignous.fr
+  cadvisor: cadvisor.lxc01.internal.endignous.fr
+# Pin these before treating the stack as production
+observability_versions:
+  prometheus: latest
+  loki: latest
+  tempo: 3.0.2
+  grafana: latest
+  alloy: latest
+  cadvisor: latest
+  node_exporter: latest
+# Fixed subnet: node-exporter (host network) listens on the gateway address only
+observability_monitoring_subnet: 172.31.250.0/24
+observability_monitoring_gateway: 172.31.250.1
+# Host scripts drop *.prom files here (homelab-offload: storage_offload_metrics_file)
+observability_textfile_dir: /var/lib/node_exporter/textfile
+# Retention, sized for the thin pool: metrics are capped by size as well as time
+observability_prometheus_retention: 30d
+observability_prometheus_retention_size: 5GB
+observability_loki_retention: 30d
+observability_tempo_retention: 168h
+# Alert when the seeding disk gets this low (diskguard pauses downloads at 40G)
+observability_local_disk_mount: /data/local
+observability_local_disk_warn_gb: 60
+observability_grafana_admin_user: admin
+# Grafana admin password — define in group_vars/lxc01/vault.yml
+observability_grafana_admin_password: "{{ vault_grafana_admin_password }}"
+# Extra Prometheus scrape jobs, e.g. a node-exporter on pve01:
+#   - job_name: pve01
+#     static_configs: [{targets: ['192.168.1.230:9100']}]
+observability_extra_scrape_configs: []
 
 # LSS Media Stack
 lss_base_dir: /opt/docker/lss

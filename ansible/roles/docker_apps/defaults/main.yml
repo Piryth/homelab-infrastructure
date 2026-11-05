@@ -35,9 +35,6 @@ caddy_reverse_proxies:
   - name: flaresolverr
     domain: flaresolverr.lxc01.internal.endignous.fr
     upstream: "192.168.1.231:8191"
-  - name: grafana
-    domain: grafana.lxc01.internal.endignous.fr
-    upstream: "192.168.1.231:3000"
 
 # Observability UIs behind Caddy, routed by container name on caddy_network
 # (no port published on the host). Added to the sites only when the stack is enabled.

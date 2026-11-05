@@ -20,7 +20,7 @@ This repository contains the Infrastructure-as-Code (IaC) and configuration mana
 
 ## 🏗️ Architecture
 
-![Architecture diagram](assets/architecture.svg)
+![Architecture diagram](assets/architecture.png)
 
 Everything runs on a single Proxmox node on the **192.168.1.0/24** LAN.
 

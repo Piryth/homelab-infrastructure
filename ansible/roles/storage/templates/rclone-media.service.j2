@@ -1,0 +1,16 @@
+# Managed by Ansible — do not edit manually
+[Unit]
+Description=rclone mount of {{ storage_crypt_name }}: ({{ storage_crypt_remote }}, encrypted)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=notify
+ExecStart=/usr/bin/rclone mount {{ storage_crypt_name }}: {{ storage_remote_mount }} \
+  --config {{ storage_rclone_config }} \
+  {{ storage_rclone_mount_opts | join(' \\\n  ') }}
+ExecStop=/bin/fusermount3 -uz {{ storage_remote_mount }}
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

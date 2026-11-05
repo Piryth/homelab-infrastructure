@@ -1,0 +1,11 @@
+# Managed by Ansible — do not edit manually
+[Unit]
+Description=Run homelab-offload every {{ storage_offload_interval }}
+
+[Timer]
+OnBootSec=15min
+OnUnitActiveSec={{ storage_offload_interval }}
+RandomizedDelaySec=2min
+
+[Install]
+WantedBy=timers.target

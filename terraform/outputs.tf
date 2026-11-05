@@ -21,15 +21,6 @@ output "lxc02_vmid" {
   value       = proxmox_virtual_environment_container.lxc02.vm_id
 }
 
-output "lxc03_ip" {
-  description = "WG host container IP"
-  value       = var.lxc03.ip
-}
-
-output "lxc03_vmid" {
-  description = "WG host container VMID"
-  value       = proxmox_virtual_environment_container.lxc03.vm_id
-}
 
 output "ansible_inventory" {
   description = "Quick inventory snippet for Ansible"
@@ -41,12 +32,8 @@ output "ansible_inventory" {
     [pihole]
     ${var.lxc02.hostname} ansible_host=${var.lxc02.ip}
 
-    [lxc03]
-    ${var.lxc03.hostname} ansible_host=${var.lxc03.ip}
-
     [lxc:children]
     pihole
     lxc01_hosts
-    lxc03
   EOT
 }

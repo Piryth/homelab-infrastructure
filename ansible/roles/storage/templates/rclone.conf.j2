@@ -1,0 +1,34 @@
+# Managed by Ansible — do not edit manually
+# Back up this file and the Vault crypt passwords off this server:
+# losing them makes the remote data unrecoverable.
+
+[{{ storage_sftp_remote }}]
+type = sftp
+host = {{ storage_sftp_host }}
+port = {{ storage_sftp_port }}
+user = {{ storage_sftp_user }}
+key_file = {{ storage_sftp_key_file }}
+known_hosts_file = {{ storage_sftp_known_hosts }}
+
+[{{ storage_crypt_name }}]
+type = crypt
+remote = {{ storage_crypt_remote }}
+filename_encryption = standard
+directory_name_encryption = true
+password = {{ rclone_crypt_password_obscured }}
+password2 = {{ rclone_crypt_salt_obscured }}
+{% if storage_fichier_enabled | bool %}
+
+# Legacy 1Fichier remotes, kept for the migration (storage_fichier_enabled)
+[fichier]
+type = fichier
+api_key = {{ storage_fichier_api_key }}
+
+[fichier-crypt]
+type = crypt
+remote = {{ storage_fichier_crypt_remote }}
+filename_encryption = standard
+directory_name_encryption = true
+password = {{ rclone_fichier_crypt_password_obscured }}
+password2 = {{ rclone_fichier_crypt_salt_obscured }}
+{% endif %}

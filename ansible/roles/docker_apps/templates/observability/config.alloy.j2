@@ -1,0 +1,141 @@
+// Managed by Ansible — do not edit manually
+// Alloy on lxc01: ships logs to Loki, scrapes labelled containers into Prometheus.
+
+// ============ DOCKER DISCOVERY ============
+discovery.docker "containers" {
+  host = "unix:///var/run/docker.sock"
+}
+
+discovery.relabel "containers" {
+  targets = discovery.docker.containers.targets
+
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(.*)"
+    target_label  = "container"
+  }
+
+  rule {
+    source_labels = ["__meta_docker_container_log_stream"]
+    target_label  = "stream"
+  }
+
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_project"]
+    target_label  = "compose_project"
+  }
+}
+
+// ============ CONTAINER LOGS ============
+loki.source.docker "containers" {
+  host          = "unix:///var/run/docker.sock"
+  targets       = discovery.docker.containers.targets
+  labels        = {host = "lxc01", source = "docker"}
+  relabel_rules = discovery.relabel.containers.rules
+  forward_to    = [loki.process.containers.receiver]
+}
+
+loki.process "containers" {
+  forward_to = [loki.write.default.receiver]
+
+  stage.docker {}
+
+  // Caddy access logs are JSON: keep the status code, site and traceID as structured
+  // metadata, so they can be filtered on without adding high-cardinality labels.
+  stage.match {
+    selector = "{container=\"caddy\"}"
+
+    stage.json {
+      expressions = {status = "status", host = "request.host", trace_id = "traceID"}
+    }
+
+    stage.structured_metadata {
+      values = {status = "status", host = "host", trace_id = "trace_id"}
+    }
+  }
+}
+
+// ============ HOST LOGS (systemd journal of lxc01) ============
+// rclone mount, mergerfs pool, homelab-offload, qbit-diskguard, docker...
+discovery.relabel "journal" {
+  targets = []
+
+  rule {
+    source_labels = ["__journal__systemd_unit"]
+    target_label  = "unit"
+  }
+
+  rule {
+    source_labels = ["__journal_priority_keyword"]
+    target_label  = "level"
+  }
+}
+
+loki.source.journal "host" {
+  max_age       = "12h"
+  relabel_rules = discovery.relabel.journal.rules
+  labels        = {host = "lxc01", source = "journal"}
+  forward_to    = [loki.write.default.receiver]
+}
+
+loki.write "default" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+  }
+}
+
+// ============ CONTAINER METRICS (opt-in) ============
+// Any container on the monitoring network with the labels
+//   prometheus.scrape=true  prometheus.port=<port>  [prometheus.path=/metrics]
+// is scraped and sent to Prometheus by remote write.
+discovery.relabel "metrics" {
+  targets = discovery.docker.containers.targets
+
+  rule {
+    source_labels = ["__meta_docker_container_label_prometheus_scrape"]
+    regex         = "true"
+    action        = "keep"
+  }
+
+  rule {
+    source_labels = ["__meta_docker_network_name"]
+    regex         = "monitoring"
+    action        = "keep"
+  }
+
+  rule {
+    source_labels = ["__address__", "__meta_docker_container_label_prometheus_port"]
+    regex         = "([^:]+)(?::\\d+)?;(\\d+)"
+    replacement   = "$1:$2"
+    target_label  = "__address__"
+  }
+
+  rule {
+    source_labels = ["__meta_docker_container_label_prometheus_path"]
+    regex         = "(.+)"
+    target_label  = "__metrics_path__"
+  }
+
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(.*)"
+    target_label  = "container"
+  }
+
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_project"]
+    target_label  = "compose_project"
+  }
+}
+
+prometheus.scrape "docker_containers" {
+  targets         = discovery.relabel.metrics.output
+  forward_to      = [prometheus.remote_write.default.receiver]
+  scrape_interval = "30s"
+}
+
+prometheus.remote_write "default" {
+  endpoint {
+    url = "http://prometheus:9090/api/v1/write"
+  }
+}

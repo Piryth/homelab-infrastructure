@@ -1,60 +1,103 @@
+# roles/storage/tasks/main.yml
 ---
-- name: Detect available disk partitions
-  ansible.builtin.shell:
-    cmd: "lsblk -rno NAME,TYPE | awk '$2==\"part\"{print \"/dev/\" $1}' | grep -E '/dev/sd[a-z]+1$'"
-  register: detected_disks
-  changed_when: false
-  failed_when: detected_disks.stdout_lines | length == 0
+# --- Preflight ---
 
-- name: Display detected disks
-  ansible.builtin.debug:
-    msg: "Detected disks: {{ detected_disks.stdout_lines }}"
+- name: Check that /dev/fuse is available
+  ansible.builtin.stat:
+    path: /dev/fuse
+  register: fuse_dev
 
-- name: Get UUID for each disk
+- name: Assert FUSE is enabled on the container
+  ansible.builtin.assert:
+    that: fuse_dev.stat.exists
+    fail_msg: "/dev/fuse missing: enable features { fuse = true } on lxc01 (terraform/lxc01.tf)"
+    quiet: true
+
+- name: Check that the local disk is mounted
   ansible.builtin.command:
-    cmd: "blkid -s UUID -o value {{ item }}"
-  register: disk_uuids
+    cmd: "mountpoint -q {{ storage_local_dir }}"
+  register: local_mount
   changed_when: false
-  loop: "{{ detected_disks.stdout_lines }}"
+  failed_when: false
+  check_mode: false
 
-- name: Build disk mapping (device → UUID)
-  ansible.builtin.set_fact:
-    disk_map: >-
-      {{
-        disk_map | default([]) + [{
-          'device': item.item,
-          'uuid': item.stdout,
-          'name': 'disk' + (idx + 1) | string,
-          'mount': disk_mount_base + '/disk' + (idx + 1) | string
-        }]
-      }}
-  loop: "{{ disk_uuids.results }}"
-  loop_control:
-    index_var: idx
+- name: Assert the local disk is mounted
+  ansible.builtin.assert:
+    that: local_mount.rc == 0
+    fail_msg: "{{ storage_local_dir }} is not a mount point: add the mount_point in terraform/lxc01.tf"
+    quiet: true
 
-- name: Display disk mapping
-  ansible.builtin.debug:
-    msg: "{{ disk_map }}"
+# Missing databases mean configs were hidden or lost: never start the apps on empty dirs
+- name: Check app databases
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  register: app_dbs
+  loop: "{{ storage_app_dbs }}"
 
-# --- Individual disk mounts ---
+- name: Assert app databases exist
+  ansible.builtin.assert:
+    that: app_dbs.results | rejectattr('stat.exists') | list | length == 0
+    fail_msg: >-
+      Missing: {{ app_dbs.results | rejectattr('stat.exists') | map(attribute='item') | join(', ') }}.
+      Restore the configs, or pass -e storage_skip_app_db_check=true on a fresh install.
+    quiet: true
+  when: not storage_skip_app_db_check | bool
 
-- name: Create individual disk mount points
-  ansible.builtin.file:
-    path: "{{ item.mount }}"
-    state: directory
-    mode: "0755"
-  loop: "{{ disk_map }}"
+- name: Assert remote storage secrets are defined
+  ansible.builtin.assert:
+    that:
+      - vault_hostbrr_host is defined
+      - vault_hostbrr_user is defined
+      - vault_hostbrr_ssh_private_key is defined
+      - vault_hostbrr_host_key is defined
+      - vault_rclone_crypt_password is defined
+      - vault_rclone_crypt_salt is defined
+      - not (storage_fichier_enabled | bool) or vault_fichier_api_key is defined
+    fail_msg: >-
+      Missing remote storage secrets in group_vars/lxc01/vault.yml
+      (vault_hostbrr_*, vault_rclone_crypt_*, and vault_fichier_api_key while storage_fichier_enabled is true)
+    quiet: true
 
-- name: Mount individual disks via UUID in fstab
-  ansible.posix.mount:
-    path: "{{ item.mount }}"
-    src: "UUID={{ item.uuid }}"
-    fstype: "{{ disk_fstype }}"
-    opts: "{{ disk_mount_opts }}"
-    state: mounted
-  loop: "{{ disk_map }}"
+- name: Assert offload thresholds are consistent
+  ansible.builtin.assert:
+    that:
+      - storage_offload_low_gb | float < storage_offload_high_gb | float
+      - storage_offload_low_gb | float > storage_diskguard_low_gb | float
+      - storage_offload_hard_min_seed_hours | float <= storage_offload_min_seed_hours | float
+      - storage_offload_verify in ['cryptcheck', 'size', 'download']
+    fail_msg: >-
+      Offload settings: low_gb must be below high_gb and above the diskguard pause
+      threshold (offload must free space before downloads get paused),
+      hard_min_seed_hours <= min_seed_hours, verify in cryptcheck|size|download
+    quiet: true
+  when: storage_offload_enabled | bool
 
-# --- MergerFS ---
+- name: Assert qBittorrent credentials are defined for the disk guard and the offload
+  ansible.builtin.assert:
+    that:
+      - vault_qbittorrent_user is defined
+      - vault_qbittorrent_password is defined
+    fail_msg: "Add vault_qbittorrent_user / vault_qbittorrent_password to group_vars/lxc01/vault.yml"
+    quiet: true
+  when: storage_diskguard_enabled | bool or storage_offload_enabled | bool
+
+# --- Packages ---
+
+- name: Install storage packages
+  ansible.builtin.apt:
+    name:
+      - rclone
+      - fuse3
+      - rsync
+      - python3
+    state: present
+    update_cache: true
+
+- name: Allow FUSE mounts to be shared with other users (containers)
+  ansible.builtin.lineinfile:
+    path: /etc/fuse.conf
+    regexp: '^#?\s*user_allow_other'
+    line: user_allow_other
 
 - name: Check if mergerfs is installed
   ansible.builtin.command:
@@ -72,11 +115,11 @@
         return_content: true
       register: mergerfs_release
 
-    - name: Set mergerfs .deb URL  # ARM64 (aarch64) for Raspberry Pi 64-bit OS
+    - name: Set mergerfs .deb URL
       ansible.builtin.set_fact:
         mergerfs_deb_url: >-
           {{ mergerfs_release.json.assets
-             | selectattr('name', 'match', '.*bookworm_aarch64\.deb$')
+             | selectattr('name', 'match', mergerfs_deb_pattern)
              | map(attribute='browser_download_url')
              | first }}
 
@@ -96,52 +139,354 @@
         path: /tmp/mergerfs.deb
         state: absent
 
-# --- MergerFS pool mount ---
+# --- Directory layout ---
 
-- name: Create mergerfs pool mount point
+- name: Create app config directories
   ansible.builtin.file:
-    path: "{{ mergerfs_pool_path }}"
+    path: "{{ storage_config_dir }}/{{ item }}"
     state: directory
-    mode: "0755"
+    owner: "{{ storage_uid }}"
+    group: "{{ storage_gid }}"
+    mode: "0775"
+  loop: "{{ storage_config_apps }}"
 
-- name: Build mergerfs source string
-  ansible.builtin.set_fact:
-    mergerfs_src: "{{ disk_map | map(attribute='mount') | join(':') }}"
-
-- name: Mount mergerfs pool in fstab
-  ansible.posix.mount:
-    path: "{{ mergerfs_pool_path }}"
-    src: "{{ mergerfs_src }}"
-    fstype: fuse.mergerfs
-    opts: "{{ mergerfs_opts }}"
-    state: mounted
-
-# --- NFS Server ---
-
-- name: Install NFS server packages
-  ansible.builtin.apt:
-    name:
-      - nfs-kernel-server
-    state: present
-    update_cache: true
-
-- name: Ensure /etc/exports.d directory exists
+- name: Create local torrents and media directories
   ansible.builtin.file:
-    path: /etc/exports.d
+    path: "{{ storage_local_dir }}/{{ item.0 }}/{{ item.1 }}"
     state: directory
-    mode: "0755"
+    owner: "{{ storage_uid }}"
+    group: "{{ storage_gid }}"
+    mode: "0775"
+  loop: "{{ ['torrents', 'media'] | product(storage_media_categories) | list }}"
 
-- name: Configure NFS export for mergerfs pool
-  ansible.builtin.template:
-    src: nfs_export.j2
-    dest: /etc/exports.d/mergerfs_pool.exports
+- name: Create rclone cache and mount points
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - "{{ storage_rclone_cache_dir }}"
+    - "{{ storage_remote_mount }}"
+    - "{{ mergerfs_pool_path }}"
+
+- name: Migrate old LSS data
+  ansible.builtin.include_tasks: migrate_lss.yml
+  when: storage_migrate_lss | bool
+
+# Hardlinks only work if torrents/ and media/ share one filesystem
+- name: Stat torrents and media directories
+  ansible.builtin.stat:
+    path: "{{ storage_local_dir }}/{{ item }}"
+  register: local_dirs
+  loop:
+    - torrents
+    - media
+
+- name: Assert torrents and media are on the same filesystem
+  ansible.builtin.assert:
+    that: local_dirs.results | map(attribute='stat.dev') | unique | length == 1
+    fail_msg: "{{ storage_local_dir }}/torrents and media are on different filesystems: hardlinks will fail"
+    quiet: true
+  when: not ansible_check_mode
+
+# --- rclone config ---
+
+- name: Create rclone config directory
+  ansible.builtin.file:
+    path: "{{ storage_rclone_config_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+
+- name: Install the remote storage SSH key
+  ansible.builtin.copy:
+    content: "{{ storage_sftp_private_key | trim }}\n"
+    dest: "{{ storage_sftp_key_file }}"
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+  notify: Restart rclone mount
+
+# Pinned host key: rclone refuses to connect if the server key changes
+- name: Pin the remote storage host key
+  ansible.builtin.copy:
+    content: "{{ storage_sftp_host_key | trim }}\n"
+    dest: "{{ storage_sftp_known_hosts }}"
     owner: root
     group: root
     mode: "0644"
-  notify: Reload NFS exports
+  notify: Restart rclone mount
 
-- name: Ensure NFS server is enabled and started
+# rclone obscure is non-deterministic: only rewrite the config when the
+# Vault values change, tracked by a fingerprint next to the config
+- name: Compute rclone secrets fingerprint
+  ansible.builtin.set_fact:
+    rclone_fingerprint: >-
+      {{ [storage_sftp_remote, storage_sftp_host, storage_sftp_port, storage_sftp_user,
+          storage_sftp_key_file, storage_sftp_known_hosts,
+          storage_crypt_name, storage_crypt_remote, storage_crypt_password, storage_crypt_salt,
+          storage_fichier_enabled, storage_fichier_api_key, storage_fichier_crypt_remote,
+          storage_fichier_crypt_password, storage_fichier_crypt_salt]
+         | map('string') | join('|') | hash('sha256') }}
+  no_log: true
+
+- name: Read current rclone secrets fingerprint
+  ansible.builtin.slurp:
+    src: "{{ storage_rclone_config }}.sha256"
+  register: rclone_fingerprint_current
+  failed_when: false
+
+- name: Check if rclone config exists
+  ansible.builtin.stat:
+    path: "{{ storage_rclone_config }}"
+  register: rclone_config_stat
+
+- name: Write rclone config
+  when: >-
+    not rclone_config_stat.stat.exists
+    or (rclone_fingerprint_current.content | default('') | b64decode | trim) != rclone_fingerprint
+  block:
+    - name: Obscure crypt passwords
+      ansible.builtin.command:
+        cmd: rclone obscure -
+        stdin: "{{ item }}"
+      register: rclone_obscured
+      changed_when: false
+      check_mode: false
+      no_log: true
+      loop:
+        - "{{ storage_crypt_password }}"
+        - "{{ storage_crypt_salt }}"
+        - "{{ storage_fichier_crypt_password }}"
+        - "{{ storage_fichier_crypt_salt }}"
+
+    - name: Template rclone config
+      ansible.builtin.template:
+        src: rclone.conf.j2
+        dest: "{{ storage_rclone_config }}"
+        owner: root
+        group: root
+        mode: "0600"
+      vars:
+        rclone_crypt_password_obscured: "{{ rclone_obscured.results[0].stdout }}"
+        rclone_crypt_salt_obscured: "{{ rclone_obscured.results[1].stdout }}"
+        rclone_fichier_crypt_password_obscured: "{{ rclone_obscured.results[2].stdout }}"
+        rclone_fichier_crypt_salt_obscured: "{{ rclone_obscured.results[3].stdout }}"
+      no_log: true
+      notify: Restart rclone mount
+
+    - name: Save rclone secrets fingerprint
+      ansible.builtin.copy:
+        content: "{{ rclone_fingerprint }}\n"
+        dest: "{{ storage_rclone_config }}.sha256"
+        owner: root
+        group: root
+        mode: "0600"
+      no_log: true
+
+- name: Enforce rclone config permissions
+  ansible.builtin.file:
+    path: "{{ storage_rclone_config }}"
+    owner: root
+    group: root
+    mode: "0600"
+  when: not ansible_check_mode or rclone_config_stat.stat.exists
+
+# --- systemd units ---
+
+# --- Replace the old 1Fichier mount unit (rclone-fichier.service) ---
+# Stopping it also stops mergerfs-pool and docker (Requires=): they are
+# started again at the end of the role.
+
+- name: Check for the old rclone-fichier unit
+  ansible.builtin.stat:
+    path: /etc/systemd/system/rclone-fichier.service
+  register: old_rclone_unit
+
+- name: Remove the old rclone-fichier unit
+  when: old_rclone_unit.stat.exists and storage_rclone_unit != 'rclone-fichier'
+  block:
+    - name: Stop and disable rclone-fichier
+      ansible.builtin.systemd:
+        name: rclone-fichier
+        state: stopped
+        enabled: false
+
+    - name: Delete rclone-fichier.service
+      ansible.builtin.file:
+        path: /etc/systemd/system/rclone-fichier.service
+        state: absent
+      notify: Reload systemd
+
+- name: Template the rclone mount unit
+  ansible.builtin.template:
+    src: rclone-media.service.j2
+    dest: "/etc/systemd/system/{{ storage_rclone_unit }}.service"
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - Reload systemd
+    - Restart rclone mount
+
+- name: Template mergerfs-pool.service
+  ansible.builtin.template:
+    src: mergerfs-pool.service.j2
+    dest: /etc/systemd/system/mergerfs-pool.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - Reload systemd
+    - Restart mergerfs-pool
+
+# Docker must not start before the pool, otherwise containers bind an empty dir
+- name: Create docker.service drop-in directory
+  ansible.builtin.file:
+    path: /etc/systemd/system/docker.service.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Make Docker wait for the mergerfs pool
+  ansible.builtin.template:
+    src: docker-require-pool.conf.j2
+    dest: /etc/systemd/system/docker.service.d/10-require-pool.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Reload systemd
+
+# --- Disk-full guard ---
+
+- name: Install disk-full guard
+  when: storage_diskguard_enabled | bool
+  block:
+    - name: Install qbit-diskguard script
+      ansible.builtin.copy:
+        src: qbit-diskguard.py
+        dest: /usr/local/bin/qbit-diskguard
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Template qbit-diskguard environment
+      ansible.builtin.template:
+        src: qbit-diskguard.env.j2
+        dest: /etc/qbit-diskguard.env
+        owner: root
+        group: root
+        mode: "0600"
+      no_log: true
+
+    - name: Template qbit-diskguard units
+      ansible.builtin.template:
+        src: "{{ item }}.j2"
+        dest: "/etc/systemd/system/{{ item }}"
+        owner: root
+        group: root
+        mode: "0644"
+      loop:
+        - qbit-diskguard.service
+        - qbit-diskguard.timer
+      notify: Reload systemd
+
+# --- Automatic offload to the remote ---
+
+- name: Install media offload
+  when: storage_offload_enabled | bool
+  block:
+    - name: Create the metrics directory read by node-exporter
+      ansible.builtin.file:
+        path: "{{ storage_offload_metrics_file | dirname }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+      when: storage_offload_metrics_file | length > 0
+
+    - name: Create offload state directory
+      ansible.builtin.file:
+        path: "{{ storage_offload_state_dir }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0700"
+
+    - name: Install homelab-offload
+      ansible.builtin.copy:
+        src: homelab-offload.py
+        dest: /usr/local/bin/homelab-offload
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Install offload-dir helper
+      ansible.builtin.template:
+        src: offload-dir.j2
+        dest: /usr/local/bin/offload-dir
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Template homelab-offload environment
+      ansible.builtin.template:
+        src: homelab-offload.env.j2
+        dest: /etc/homelab-offload.env
+        owner: root
+        group: root
+        mode: "0600"
+      no_log: true
+
+    - name: Template homelab-offload units
+      ansible.builtin.template:
+        src: "{{ item }}.j2"
+        dest: "/etc/systemd/system/{{ item }}"
+        owner: root
+        group: root
+        mode: "0644"
+      loop:
+        - homelab-offload.service
+        - homelab-offload.timer
+      notify: Reload systemd
+
+- name: Flush handlers
+  ansible.builtin.meta: flush_handlers
+
+- name: Enable and start storage services
   ansible.builtin.systemd:
-    name: nfs-kernel-server
+    name: "{{ item }}"
     enabled: true
     state: started
+  loop:
+    - "{{ storage_rclone_unit }}"
+    - mergerfs-pool
+    # Brought back if a unit swap above stopped it (Requires= chain)
+    - docker
+
+- name: Enable disk-full guard timer
+  ansible.builtin.systemd:
+    name: qbit-diskguard.timer
+    enabled: true
+    state: started
+  when: storage_diskguard_enabled | bool
+
+- name: Enable media offload timer
+  ansible.builtin.systemd:
+    name: homelab-offload.timer
+    enabled: true
+    state: started
+  when: storage_offload_enabled | bool
+
+- name: Disable media offload timer
+  ansible.builtin.systemd:
+    name: homelab-offload.timer
+    enabled: false
+    state: stopped
+  failed_when: false
+  when: not (storage_offload_enabled | bool)

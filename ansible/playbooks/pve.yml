@@ -1,5 +1,0 @@
----
-- hosts: pve
-  become: true
-  roles:
-    - role: storage

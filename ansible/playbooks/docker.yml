@@ -1,6 +1,10 @@
 ---
-- name: Deploy Docker apps
+- name: Configure lxc01 storage and deploy Docker apps
   hosts: lxc01
   become: true
   roles:
-    - docker_apps
+    # Storage first: Docker waits for the mergerfs pool
+    - role: storage
+      tags: storage
+    - role: docker_apps
+      tags: docker_apps

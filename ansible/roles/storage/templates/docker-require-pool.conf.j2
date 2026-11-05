@@ -1,0 +1,6 @@
+# Managed by Ansible — do not edit manually
+# RequiresMountsFor= alone is not enough: the pool is a FUSE mount created by a
+# service, so its mount unit does not exist at boot. Depend on the service.
+[Unit]
+Requires=mergerfs-pool.service
+After=mergerfs-pool.service

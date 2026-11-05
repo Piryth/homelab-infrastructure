@@ -1,0 +1,15 @@
+# Managed by Ansible — do not edit manually
+[Unit]
+Description=Offload finished media from {{ storage_local_dir }} to {{ storage_crypt_name }}:
+After={{ storage_rclone_unit }}.service mergerfs-pool.service docker.service
+# Skip the run if the remote is not mounted (nothing to verify against)
+ConditionPathIsMountPoint={{ storage_remote_mount }}
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/homelab-offload.env
+ExecStart=/usr/bin/python3 /usr/local/bin/homelab-offload
+# Background work: never compete with streaming
+Nice=10
+IOSchedulingClass=idle
+TimeoutStartSec=12h

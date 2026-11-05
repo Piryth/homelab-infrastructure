@@ -1,39 +1,200 @@
-# roles/pve_storage/defaults/main.yml
+# roles/storage/defaults/main.yml
 ---
-# Disk partition pattern
-disk_pattern: "/dev/sd*1"
+# Owner of the media tree (must match PUID/PGID of the LSS containers)
+storage_uid: 1000
+storage_gid: 1000
 
-# Filesystem type for individual disks
-disk_fstype: ext4
+# --- App configs (rootfs, kept off the media disk) ---
 
-# Mount options for individual disks
-disk_mount_opts: defaults,nofail,noatime
+storage_config_dir: /data/config
+storage_config_apps:
+  - gluetun
+  - qbittorrent
+  - prowlarr
+  - radarr
+  - sonarr
+  - lidarr
+  - jellyfin
+  - jellyseerr
+  - recyclarr
+  - navidrome
 
-# Base path for individual disk mounts
-disk_mount_base: /mnt/disks
+# Stop the deploy if these databases are missing (configs hidden or lost).
+# Set storage_skip_app_db_check=true for a fresh install.
+storage_skip_app_db_check: false
+storage_app_dbs:
+  - "{{ storage_config_dir }}/lidarr/lidarr.db"
+  - "{{ storage_config_dir }}/navidrome/navidrome.db"
 
-# MergerFS pool path
-mergerfs_pool_path: /mnt/pool
+# --- Local disk (512G Proxmox mount point) ---
 
-# mergerfs options — crossdir is required for hardlinks across dirs on same branch
-mergerfs_opts: "defaults,allow_other,use_ino,cache.files=off,category.create=epmfs,moveonenospc=true,minfreespace=128G,fsname=mergerfs"
-# NFS export network (e.g. single host, subnet, or wildcard)
-# Examples:
-#   "192.168.1.0/24"  → entire subnet
-#   "192.168.1.50"    → single client
-#   "*"               → anyone (not recommended)
-nfs_export_network: "192.168.1.0/24"
+# mergerfs branch 1 (RW) — torrents and media MUST share this filesystem for hardlinks
+storage_local_dir: /data/local
+storage_media_categories:
+  - tv
+  - movies
+  - music
 
-# NFS export options
-# - rw               : read/write access
-# - sync             : write to disk before replying (data safety)
-# - no_subtree_check : required for FUSE/mergerfs, avoids file handle issues
-# - no_root_squash   : preserves root permissions (needed for hardlink ops)
-# - fsid             : stable FS identifier; mergerfs has no persistent fsid
-nfs_export_opts:
-  - rw
-  - sync
-  - no_subtree_check
-  - no_root_squash
-  - fsid=42
+# --- One-time migration of the old /data/lss tree into /data/local ---
 
+# Explicit opt-in: ansible-playbook playbooks/docker.yml -e storage_migrate_lss=true
+storage_migrate_lss: false
+storage_lss_old_dir: /data/lss
+storage_lss_compose_dir: /opt/docker/lss
+# Free space kept on /data/local after the migration
+storage_migrate_margin_gb: 40
+
+# --- rclone ---
+
+storage_rclone_config_dir: /etc/rclone
+storage_rclone_config: "{{ storage_rclone_config_dir }}/rclone.conf"
+storage_rclone_cache_dir: /var/cache/rclone
+
+# --- Remote storage: HostBrr storage account over SFTP ---
+
+# Host, user, SSH key and host key are kept in Vault (group_vars/lxc01/vault.yml)
+storage_sftp_remote: hostbrr
+storage_sftp_host: "{{ vault_hostbrr_host }}"
+storage_sftp_port: 53211
+storage_sftp_user: "{{ vault_hostbrr_user }}"
+storage_sftp_private_key: "{{ vault_hostbrr_ssh_private_key }}"
+# Output of: ssh-keyscan -p 53211 -t ed25519 <host>
+storage_sftp_host_key: "{{ vault_hostbrr_host_key }}"
+storage_sftp_key_file: "{{ storage_rclone_config_dir }}/{{ storage_sftp_remote }}_ed25519"
+storage_sftp_known_hosts: "{{ storage_rclone_config_dir }}/known_hosts"
+
+# --- Crypt remote (what gets mounted) ---
+
+# Everything stored remotely goes through this crypt remote.
+# Back up the password and salt off this server: without them the data is unrecoverable.
+storage_crypt_name: media-crypt
+storage_crypt_remote: "{{ storage_sftp_remote }}:homelab-crypt"
+storage_crypt_password: "{{ vault_rclone_crypt_password }}"
+storage_crypt_salt: "{{ vault_rclone_crypt_salt }}"
+
+# --- 1Fichier (legacy, kept read-only for the migration) ---
+
+# Set to false once everything is copied to HostBrr: removes the fichier remotes from rclone.conf
+storage_fichier_enabled: true
+storage_fichier_api_key: "{{ vault_fichier_api_key | default('') }}"
+storage_fichier_crypt_remote: "fichier:homelab-crypt"
+# Same keys as the new crypt by default (raw copy possible). If you created new crypt
+# keys, put the OLD ones in vault_fichier_crypt_password / vault_fichier_crypt_salt.
+storage_fichier_crypt_password: "{{ vault_fichier_crypt_password | default(vault_rclone_crypt_password) }}"
+storage_fichier_crypt_salt: "{{ vault_fichier_crypt_salt | default(vault_rclone_crypt_salt) }}"
+
+# --- rclone mount (mergerfs branch 2, NC: read/delete only) ---
+
+storage_rclone_unit: rclone-media
+# Remote-control address of the mount (the offload script refreshes the mount through it)
+storage_rclone_rc_addr: 127.0.0.1:5572
+storage_remote_mount: /mnt/remote
+storage_rclone_mount_opts:
+  - "--uid {{ storage_uid }}"
+  - "--gid {{ storage_gid }}"
+  - "--umask 002"
+  - "--allow-other"
+  - "--vfs-cache-mode full"
+  - "--vfs-cache-max-size 50G"
+  - "--vfs-cache-max-age 24h"
+  - "--cache-dir {{ storage_rclone_cache_dir }}"
+  - "--dir-cache-time 12h"
+  - "--buffer-size 64M"
+  - "--vfs-read-ahead 128M"
+  # Fail and retry a stuck connection instead of hanging
+  - "--timeout 5m"
+  - "--low-level-retries 10"
+  # Remote control, used by the offload script for vfs/refresh
+  - "--rc"
+  - "--rc-addr {{ storage_rclone_rc_addr }}"
+  - "--rc-no-auth"
+
+# --- mergerfs pool ---
+
+# .deb asset matched on the latest GitHub release (lxc01: Debian 13 x86_64)
+mergerfs_deb_pattern: ".*debian-{{ ansible_facts['distribution_release'] }}_amd64\\.deb$"
+
+mergerfs_pool_path: /mnt/pool/data
+# create=ff        : new files land on the first branch (local)
+# statfs_ignore=nc : free space reported = local only, so the Arrs protect the small disk
+# minfreespace     : ENOSPC instead of spilling to the remote
+mergerfs_opts: "allow_other,use_ino,category.create=ff,minfreespace=30G,statfs_ignore=nc,moveonenospc=false,fsname=pool"
+mergerfs_branches: "{{ storage_local_dir }}=RW:{{ storage_remote_mount }}=NC"
+# Seconds mergerfs-pool.service waits for the mount before failing
+mergerfs_mount_timeout: 30
+
+# --- Disk-full guard ---
+
+# qBittorrent writes through the pool, where mergerfs refuses writes below
+# minfreespace: pause downloads earlier (below low) and resume above high,
+# so torrents never fail on a full disk. Freeing space is homelab-offload's job.
+storage_diskguard_enabled: true
+storage_diskguard_low_gb: 40
+storage_diskguard_high_gb: 80
+storage_diskguard_interval: 5min
+storage_qbittorrent_url: "http://127.0.0.1:9090"
+# qBittorrent WebUI credentials — define in group_vars/lxc01/vault.yml
+storage_qbittorrent_user: "{{ vault_qbittorrent_user }}"
+storage_qbittorrent_password: "{{ vault_qbittorrent_password }}"
+
+# --- Automatic offload to the remote (homelab-offload) ---
+# Moves finished media from /data/local to the encrypted remote, item by item
+# (movie folder, season, album), deciding from free space, seeding goals and
+# torrent popularity. Logs: journalctl -u homelab-offload
+
+storage_offload_enabled: true
+# Start in dry run: read the plan in the journal, then set to false
+storage_offload_dry_run: false
+storage_offload_interval: 30min
+
+# Library categories offloaded and the folder depth of one item:
+# movies/Title (Year) = 1, tv/Show/Season 01 = 2, music/Artist/Album = 2
+storage_offload_categories:
+  movies: 1
+  tv: 2
+
+# Free space on /data/local: below low = pressure mode, which offloads until high.
+# Keep low above the diskguard pause threshold, and size both against the
+# Proxmox thin pool, not only the filesystem (see README).
+storage_offload_low_gb: 150
+storage_offload_high_gb: 220
+
+# Seeding goals
+storage_offload_min_ratio: 2.0
+storage_offload_min_seed_hours: 72
+# Never offload a torrent younger than this, even under pressure (tracker rules)
+storage_offload_hard_min_seed_hours: 24
+storage_offload_max_seed_days: 30
+# Popular torrents may seed longer
+storage_offload_max_seed_popular_days: 90
+# true: keep seeding ratio-satisfied torrents until space is needed
+storage_offload_seed_while_space: true
+
+# Library folders no torrent uses anymore (manual imports, finished seeds):
+# offload them as soon as they are older than the minimum age
+storage_offload_orphans_always: true
+storage_offload_orphan_min_age_hours: 24
+
+# Popularity, measured from qBittorrent's upload counter over a sliding window
+# and the swarm reported by the tracker
+storage_offload_pop_window_days: 7
+storage_offload_pop_min_history_hours: 24
+# popular: uploads >= factor x torrent size per window, or >= N leechers,
+# or leechers present while the swarm has <= rare_seeders other seeds
+storage_offload_pop_factor: 0.25
+storage_offload_pop_leechers: 3
+storage_offload_rare_seeders: 1
+# cold: uploads < factor x size per window and no leechers -> offload early
+storage_offload_cold_factor: 0.01
+
+# qBittorrent tag that protects a torrent (and its library item) from offloading
+storage_offload_keep_tag: keep
+storage_offload_max_gb_per_run: 32
+# cryptcheck (content, needs hashes on the remote) | size | download (slow, full re-read)
+storage_offload_verify: cryptcheck
+storage_offload_transfers: 4
+storage_offload_state_dir: /var/lib/homelab-offload
+# Path of the torrent folders inside the qBittorrent container, mapped to storage_local_dir
+storage_offload_container_root: /data
+# Run metrics for node-exporter's textfile collector (observability stack); "" disables
+storage_offload_metrics_file: /var/lib/node_exporter/textfile/homelab_offload.prom

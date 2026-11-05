@@ -1,13 +1,36 @@
 {# templates/caddy/Caddyfile.j2 #}
 {
     email {{ caddy_email }}
+{% if caddy_metrics | bool %}
+    # Prometheus metrics, with a "host" label per site
+    metrics {
+        per_host
+    }
+{% endif %}
 }
 
-{% for proxy in caddy_reverse_proxies %}
+{% if caddy_metrics | bool %}
+# Metrics endpoint, only reachable on caddy_network (port not published)
+:{{ caddy_metrics_port }} {
+    metrics /metrics
+}
+
+{% endif %}
+{% for proxy in caddy_sites %}
 {{ proxy.domain }} {
     tls {
         dns cloudflare {env.CLOUDFLARE_API_TOKEN}
     }
+{% if caddy_access_logs | bool %}
+    # JSON access log on stdout, collected by Alloy into Loki
+    log
+{% endif %}
+{% if caddy_tracing | bool %}
+    # OpenTelemetry span per request, exported to Tempo; adds traceID to the access log
+    tracing {
+        span {{ proxy.name }}
+    }
+{% endif %}
     reverse_proxy {{ proxy.upstream }}{% if proxy.tls_insecure | default(false) %} {
         transport http {
             tls_insecure_skip_verify

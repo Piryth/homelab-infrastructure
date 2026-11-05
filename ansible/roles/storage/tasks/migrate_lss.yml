@@ -1,0 +1,127 @@
+# roles/storage/tasks/migrate_lss.yml
+# One-time move of the old /data/lss tree (rootfs) into /data/local (512G disk).
+# Different filesystems: a single rsync -aH run keeps torrent <-> media hardlinks.
+---
+- name: Check for the old LSS data tree
+  ansible.builtin.stat:
+    path: "{{ storage_lss_old_dir }}"
+  register: lss_old_dir
+
+- name: Migrate old LSS data
+  when: lss_old_dir.stat.exists
+  block:
+    # --- Pre-checks (nothing is changed before they pass) ---
+
+    - name: Measure old LSS data size (hardlinks counted once)
+      ansible.builtin.command:
+        cmd: "du -sb {{ storage_lss_old_dir }}"
+      register: lss_old_size
+      changed_when: false
+      check_mode: false
+
+    - name: Measure free space on the local disk
+      ansible.builtin.command:
+        cmd: "df -B1 --output=avail {{ storage_local_dir }}"
+      register: local_avail
+      changed_when: false
+      check_mode: false
+
+    - name: Assert old LSS data fits on the local disk
+      ansible.builtin.assert:
+        that: >-
+          (lss_old_size.stdout.split()[0] | int)
+          + (storage_migrate_margin_gb | int) * 1024 ** 3
+          < (local_avail.stdout_lines[-1] | trim | int)
+        fail_msg: >-
+          {{ storage_lss_old_dir }} needs
+          {{ ((lss_old_size.stdout.split()[0] | int) / 1024 ** 3) | round(1) }} GiB but
+          {{ storage_local_dir }} only has
+          {{ ((local_avail.stdout_lines[-1] | trim | int) / 1024 ** 3) | round(1) }} GiB free
+          ({{ storage_migrate_margin_gb }} GiB margin required). Nothing was moved.
+        quiet: true
+
+    - name: Find files that already exist on the local disk
+      ansible.builtin.shell:
+        cmd: >-
+          set -o pipefail;
+          find . ! -type d -print0
+          | while IFS= read -r -d '' f; do
+          [ -e "{{ storage_local_dir }}/$f" ] && printf '%s\n' "$f"; done || true
+        chdir: "{{ storage_lss_old_dir }}"
+        executable: /bin/bash
+      register: lss_conflicts
+      changed_when: false
+      check_mode: false
+
+    - name: Assert nothing would be overwritten
+      ansible.builtin.assert:
+        that: lss_conflicts.stdout_lines | length == 0
+        fail_msg: >-
+          {{ lss_conflicts.stdout_lines | length }} file(s) already exist in {{ storage_local_dir }}
+          (first: {{ lss_conflicts.stdout_lines[:5] | join(', ') }}). Nothing was moved.
+        quiet: true
+
+    - name: Count hardlinked files before the move
+      ansible.builtin.shell:
+        cmd: "set -o pipefail; find {{ storage_lss_old_dir }} -type f -links +1 | wc -l"
+        executable: /bin/bash
+      register: lss_links_before
+      changed_when: false
+      check_mode: false
+
+    # --- Move ---
+
+    - name: Check for the LSS compose project
+      ansible.builtin.stat:
+        path: "{{ storage_lss_compose_dir }}/docker-compose.yml"
+      register: lss_compose
+
+    - name: Stop the LSS stack
+      community.docker.docker_compose_v2:
+        project_src: "{{ storage_lss_compose_dir }}"
+        state: stopped
+      when: lss_compose.stat.exists
+
+    - name: Move old LSS data to the local disk
+      ansible.builtin.command:
+        cmd: >-
+          rsync -aH --ignore-existing --remove-source-files
+          {{ storage_lss_old_dir }}/ {{ storage_local_dir }}/
+      changed_when: true
+
+    # --- Verify (the move does not run in check mode) ---
+
+    - name: Count hardlinked files after the move
+      ansible.builtin.shell:
+        cmd: "set -o pipefail; find {{ storage_local_dir }} -type f -links +1 | wc -l"
+        executable: /bin/bash
+      register: lss_links_after
+      changed_when: false
+      when: not ansible_check_mode
+
+    - name: Assert hardlinks survived the move
+      ansible.builtin.assert:
+        that: lss_links_after.stdout | int >= lss_links_before.stdout | int
+        fail_msg: >-
+          Hardlinked files: {{ lss_links_before.stdout }} before, {{ lss_links_after.stdout }} after.
+          Check {{ storage_local_dir }} before deploying (seeding torrents would use double space).
+        quiet: true
+      when: not ansible_check_mode
+
+    - name: Remove empty directories left in the old tree
+      ansible.builtin.command:
+        cmd: "find {{ storage_lss_old_dir }} -depth -type d -empty -delete"
+      changed_when: true
+
+    - name: Check that the old tree is gone
+      ansible.builtin.stat:
+        path: "{{ storage_lss_old_dir }}"
+      register: lss_old_after
+      when: not ansible_check_mode
+
+    - name: Assert the old tree is empty
+      ansible.builtin.assert:
+        that: not lss_old_after.stat.exists
+        fail_msg: "{{ storage_lss_old_dir }} still has files that were not moved: check them manually"
+        quiet: true
+      when: not ansible_check_mode
